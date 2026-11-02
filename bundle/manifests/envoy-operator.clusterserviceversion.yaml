@@ -5,8 +5,7 @@ metadata:
   annotations:
     capabilities: Basic Install
     categories: Networking,AI/Machine Learning
-    description: >-
-      Installs Envoy Gateway and The Agent Router (formerly Envoy AI Gateway) on OpenShift, on top of the Gateway API that OpenShift provides.
+    description: Installs Envoy Gateway and The Agent Router (formerly Envoy AI Gateway) on OpenShift, on top of the Gateway API that OpenShift provides.
     repository: https://github.com/ccangemi/envoy-operator
     support: Community
     operatorframework.io/suggested-namespace: envoy-gateway-system
@@ -325,8 +324,8 @@ spec:
             replicas: 1
             selector:
               matchLabels:
-                "app.kubernetes.io/name": "envoy-gateway"
-                "control-plane": "envoy-gateway"
+                app.kubernetes.io/name: envoy-gateway
+                control-plane: envoy-gateway
             template:
               metadata:
                 annotations:
@@ -334,8 +333,8 @@ spec:
                   prometheus.io/scrape: "true"
                   kubectl.kubernetes.io/default-container: envoy-gateway
                 labels:
-                  "app.kubernetes.io/name": "envoy-gateway"
-                  "control-plane": "envoy-gateway"
+                  app.kubernetes.io/name: envoy-gateway
+                  control-plane: envoy-gateway
                   app.kubernetes.io/part-of: envoy-operator
                   app.kubernetes.io/version: 0.1.0
               spec:
@@ -443,11 +442,11 @@ spec:
             replicas: 1
             selector:
               matchLabels:
-                "app.kubernetes.io/name": "ai-gateway-controller"
+                app.kubernetes.io/name: ai-gateway-controller
             template:
               metadata:
                 labels:
-                  "app.kubernetes.io/name": "ai-gateway-controller"
+                  app.kubernetes.io/name: ai-gateway-controller
                   app.kubernetes.io/part-of: envoy-operator
                   app.kubernetes.io/version: 0.1.0
                 annotations:
@@ -470,7 +469,7 @@ spec:
                       runAsNonRoot: true
                       seccompProfile:
                         type: RuntimeDefault
-                    image: "docker.io/envoyproxy/ai-gateway-controller@sha256:4d663346354321a677c4e942017277f690d0d7715f8e3348a535db174679e4f8"
+                    image: docker.io/envoyproxy/ai-gateway-controller@sha256:4d663346354321a677c4e942017277f690d0d7715f8e3348a535db174679e4f8
                     imagePullPolicy: IfNotPresent
                     ports:
                       - containerPort: 9443
@@ -575,15 +574,15 @@ spec:
                     imagePullPolicy: IfNotPresent
                     name: envoy-gateway-certgen
                     securityContext:
-                      "allowPrivilegeEscalation": false
-                      "capabilities":
-                        "drop":
-                          - "ALL"
-                      "privileged": false
-                      "readOnlyRootFilesystem": true
-                      "runAsNonRoot": true
-                      "seccompProfile":
-                        "type": "RuntimeDefault"
+                      allowPrivilegeEscalation: false
+                      capabilities:
+                        drop:
+                          - ALL
+                      privileged: false
+                      readOnlyRootFilesystem: true
+                      runAsNonRoot: true
+                      seccompProfile:
+                        type: RuntimeDefault
                     resources:
                       requests:
                         cpu: 10m
@@ -613,15 +612,15 @@ spec:
                       - name: tmp
                         mountPath: /tmp
                     securityContext:
-                      "allowPrivilegeEscalation": false
-                      "capabilities":
-                        "drop":
-                          - "ALL"
-                      "privileged": false
-                      "readOnlyRootFilesystem": true
-                      "runAsNonRoot": true
-                      "seccompProfile":
-                        "type": "RuntimeDefault"
+                      allowPrivilegeEscalation: false
+                      capabilities:
+                        drop:
+                          - ALL
+                      privileged: false
+                      readOnlyRootFilesystem: true
+                      runAsNonRoot: true
+                      seccompProfile:
+                        type: RuntimeDefault
                     resources:
                       requests:
                         cpu: 10m
@@ -814,13 +813,13 @@ spec:
               verbs:
                 - create
             - apiGroups:
-                - "inference.networking.k8s.io"
+                - inference.networking.k8s.io
               resources:
-                - "inferencepools"
+                - inferencepools
               verbs:
-                - "get"
-                - "list"
-                - "watch"
+                - get
+                - list
+                - watch
         - serviceAccountName: ai-gateway-controller
           rules:
             - apiGroups:
@@ -832,7 +831,7 @@ spec:
               verbs:
                 - '*'
             - apiGroups:
-                - "apps"
+                - apps
               resources:
                 - deployments
                 - daemonsets
@@ -899,7 +898,7 @@ spec:
               resources:
                 - mutatingwebhookconfigurations
               resourceNames:
-                - 'envoy-ai-gateway-gateway-pod-mutator.envoy-gateway-system'
+                - envoy-ai-gateway-gateway-pod-mutator.envoy-gateway-system
               verbs:
                 - update
                 - patch

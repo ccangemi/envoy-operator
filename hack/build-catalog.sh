@@ -35,7 +35,11 @@ channel=""
     csv=$(find "$dir/manifests" -name '*.clusterserviceversion.yaml' | head -1)
     name=$("$YQ" '.metadata.name' "$csv")
     replaces=$("$YQ" '.spec.replaces // ""' "$csv")
-    channel=$("$YQ" '.annotations."operators.operatorframework.io.bundle.channels.v1"' "$dir/metadata/annotations.yaml")
+    channel=$("$YQ" '.annotations."operators.operatorframework.io.bundle.channel.default.v1"' "$dir/metadata/annotations.yaml")
+    channels=$("$YQ" '.annotations."operators.operatorframework.io.bundle.channels.v1"' "$dir/metadata/annotations.yaml")
+    # The test catalog has one channel. Publishing to several channels is the
+    # job of the community catalog templates.
+    [[ $channels == "$channel" ]] || fail "$name: the test catalog supports one channel, but the bundle has '$channels'"
     log "adding $name ($image)"
     echo "---"
     # Replace the bundle objects with the CSV metadata, like the community

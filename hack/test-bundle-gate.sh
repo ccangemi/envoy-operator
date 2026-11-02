@@ -85,6 +85,11 @@ expect_fail "privilege escalation" "drops all capabilities" \
   yqi "${D}[1].spec.template.spec.initContainers[1].securityContext.allowPrivilegeEscalation = true" "$CSV_FILE"
 expect_fail "capabilities kept" "drops all capabilities" \
   yqi "${D}[0].spec.template.spec.containers[0].securityContext.capabilities.drop = [\"NET_RAW\"]" "$CSV_FILE"
+expect_fail "no capabilities at all" "drops all capabilities" \
+  yqi "del(${D}[1].spec.template.spec.containers[0].securityContext.capabilities)" "$CSV_FILE"
+expect_fail "no security context at all" "drops all capabilities" \
+  yqi "del(${D}[1].spec.template.spec.initContainers[0].securityContext)" "$CSV_FILE"
+expect_fail "no Envoy Gateway CRDs" "the bundle has Envoy Gateway CRDs" sh -c 'rm manifests/gateway.envoyproxy.io_*.yaml'
 expect_fail "missing CPU limit" "CPU and memory requests and limits" \
   yqi "del(${D}[1].spec.template.spec.initContainers[0].resources.limits.cpu)" "$CSV_FILE"
 expect_fail "missing memory request" "CPU and memory requests and limits" \

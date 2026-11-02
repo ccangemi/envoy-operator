@@ -29,7 +29,23 @@ check() {
     errors=$((errors + 1))
   fi
 }
-not() { ! "$@"; }
+# none <yq expression> <file...>: true when the expression matches nothing.
+# It counts the matches, so a yq error (for example on a missing field) is a
+# failure and never a silent pass.
+none() {
+  local expr=$1 n
+  shift
+  n=$("$YQ" ea -N "[$expr] | length" "$@") || return 1
+  [[ $n == 0 ]]
+}
+# some <yq expression> <file...>: true when the expression matches at least
+# once.
+some() {
+  local expr=$1 n
+  shift
+  n=$("$YQ" ea -N "[$expr] | length" "$@") || return 1
+  [[ $n -gt 0 ]]
+}
 
 [[ -f $CSV ]] || fail "no ClusterServiceVersion found at $CSV. Run 'make bundle' first."
 
@@ -39,16 +55,15 @@ ALL_CONTAINERS='.spec.install.spec.deployments[].spec.template.spec | (.containe
 echo "Checking ${BUNDLE_DIR#"$ROOT_DIR"/} ($CSV_NAME)"
 
 # --- CRDs ------------------------------------------------------------------
-crd_groups() { "$YQ" -N 'select(.kind == "CustomResourceDefinition") | .spec.group' "$MANIFESTS"/*.yaml; }
-only_allowed_groups() {
-  local g
-  for g in $(crd_groups); do [[ $g =~ $ALLOWED_CRD_GROUPS ]] || return 1; done
-}
+CRDS='select(.kind == "CustomResourceDefinition")'
+check "the bundle has Envoy Gateway CRDs" some "$CRDS | select(.spec.group == \"gateway.envoyproxy.io\")" "$MANIFESTS"/*.yaml
+check "the bundle has agent router CRDs" some "$CRDS | select(.spec.group == \"aigateway.envoyproxy.io\")" "$MANIFESTS"/*.yaml
 check "no Gateway API CRD (gateway.networking.k8s.io): OpenShift owns them" \
-  not grep -qx 'gateway.networking.k8s.io' <(crd_groups)
+  none "$CRDS | select(.spec.group == \"gateway.networking.k8s.io\")" "$MANIFESTS"/*.yaml
 check "no InferencePool CRD (inference.networking.*)" \
-  not grep -q '^inference\.networking' <(crd_groups)
-check "every CRD group is allowed ($ALLOWED_CRD_GROUPS)" only_allowed_groups
+  none "$CRDS | select(.spec.group | test(\"^inference\\.networking\"))" "$MANIFESTS"/*.yaml
+check "every CRD group is allowed ($ALLOWED_CRD_GROUPS)" \
+  env G="$ALLOWED_CRD_GROUPS" "$YQ" ea -N -e "[$CRDS | select(.spec.group | test(strenv(G)) | not)] | length == 0" "$MANIFESTS"/*.yaml
 
 owned_match() {
   diff <("$YQ" -N '.spec.customresourcedefinitions.owned[].name' "$CSV" | sort) \
@@ -57,11 +72,9 @@ owned_match() {
 check "the CSV owns exactly the CRDs in the bundle" owned_match
 
 # --- Forbidden objects -------------------------------------------------------
-forbidden_kinds() {
-  "$YQ" -N '.kind' "$MANIFESTS"/*.yaml | grep -E -x \
-    'Namespace|ValidatingAdmissionPolicy|ValidatingAdmissionPolicyBinding|MutatingWebhookConfiguration|ValidatingWebhookConfiguration|SecurityContextConstraints'
-}
-check "no Namespace, admission policy, webhook configuration or SCC in the bundle" not forbidden_kinds
+FORBIDDEN='select(.kind | test("^(Namespace|ValidatingAdmissionPolicy|ValidatingAdmissionPolicyBinding|MutatingWebhookConfiguration|ValidatingWebhookConfiguration|SecurityContextConstraints)$"))'
+check "no Namespace, admission policy, webhook configuration or SCC in the bundle" \
+  none "$FORBIDDEN" "$MANIFESTS"/*.yaml
 check "the CSV defines no OLM webhooks (the bootstrap creates the webhook)" \
   "$YQ" -e '(.spec.webhookdefinitions // []) | length == 0' "$CSV"
 
@@ -70,7 +83,7 @@ eg_config() {
   "$YQ" '.data."envoy-gateway.yaml"' "$MANIFESTS/envoy-gateway-config_v1_configmap.yaml"
 }
 check "Envoy Gateway has no provider.kubernetes.watch block" \
-  not "$YQ" -e '.provider.kubernetes.watch' <(eg_config)
+  none 'select(.provider.kubernetes | has("watch"))' <(eg_config)
 check "the Envoy Gateway topology injector is disabled" \
   "$YQ" -e '.proxyTopologyInjector.disabled == true' <(eg_config)
 check "Envoy Gateway uses the GatewayNamespace or ControllerNamespace deploy type" \
@@ -82,35 +95,42 @@ check "Envoy Gateway enables Backend and EnvoyPatchPolicy" \
   "$YQ" -e '.extensionApis.enableBackend and .extensionApis.enableEnvoyPatchPolicy' <(eg_config)
 
 # --- Images ------------------------------------------------------------------
+# Prints every image reference. Fails when yq fails or finds no image, so the
+# checks below cannot pass on an empty list.
 all_images() {
-  "$YQ" -N "$ALL_CONTAINERS | .image" "$CSV"
-  "$YQ" -N "$ALL_CONTAINERS | .args[]? | select(test(\"^--extProcImage=\")) | sub(\"^--extProcImage=\", \"\")" "$CSV"
-  "$YQ" -N '.. | select(has("image")) | .image' <(eg_config)
+  local images
+  images=$("$YQ" -N "$ALL_CONTAINERS | .image" "$CSV") &&
+    images+=$'\n'$("$YQ" -N "$ALL_CONTAINERS | .args[]? | select(test(\"^--extProcImage=\")) | sub(\"^--extProcImage=\", \"\")" "$CSV") &&
+    images+=$'\n'$(eg_config | "$YQ" -N '.. | select(tag == "!!map") | select(has("image")) | .image') || return 1
+  [[ $(wc -w <<<"$images") -ge 4 ]] || return 1
+  printf '%s\n' "$images" | grep -v '^$'
 }
 images_pinned() {
-  local i
-  for i in $(all_images); do [[ $i == *@sha256:* ]] || { echo "not pinned: $i"; return 1; }; done
+  local i images
+  images=$(all_images) || return 1
+  for i in $images; do [[ $i == *@sha256:* ]] || { echo "not pinned: $i"; return 1; }; done
 }
 images_related() {
-  local i
-  for i in $(all_images); do
+  local i images
+  images=$(all_images) || return 1
+  for i in $images; do
     I=$i "$YQ" -e '.spec.relatedImages[] | select(.image == strenv(I))' "$CSV" || { echo "not in relatedImages: $i"; return 1; }
   done
 }
 check "every image is pinned by digest" images_pinned
 check "every image is listed in relatedImages" images_related
 check "every related image is pinned by digest" \
-  not "$YQ" -e '.spec.relatedImages[] | select(.image | test("@sha256:") | not)' "$CSV"
+  none '.spec.relatedImages[] | select(.image | test("@sha256:") | not)' "$CSV"
 
 # --- Pod security and resources ----------------------------------------------
 check "no fixed runAsUser, runAsGroup or fsGroup (restricted-v2 SCC)" \
-  not "$YQ" -e '.spec.install.spec.deployments[].spec.template.spec | .. | select(has("runAsUser") or has("runAsGroup") or has("fsGroup"))' "$CSV"
+  none '.spec.install.spec.deployments[].spec.template.spec | .. | select(tag == "!!map") | select(has("runAsUser") or has("runAsGroup") or has("fsGroup"))' "$CSV"
 check "every container drops all capabilities and disallows privilege escalation" \
-  not "$YQ" -e "$ALL_CONTAINERS | select(.securityContext.allowPrivilegeEscalation != false or (.securityContext.capabilities.drop | contains([\"ALL\"]) | not))" "$CSV"
+  none "$ALL_CONTAINERS | select(.securityContext.allowPrivilegeEscalation != false or (((.securityContext.capabilities.drop // []) | contains([\"ALL\"])) | not))" "$CSV"
 check "every container has CPU and memory requests and limits" \
-  not "$YQ" -e "$ALL_CONTAINERS | select(.resources.requests.cpu == null or .resources.requests.memory == null or .resources.limits.cpu == null or .resources.limits.memory == null)" "$CSV"
+  none "$ALL_CONTAINERS | select(.resources.requests.cpu == null or .resources.requests.memory == null or .resources.limits.cpu == null or .resources.limits.memory == null)" "$CSV"
 check "every main container has readiness and liveness probes" \
-  not "$YQ" -e '.spec.install.spec.deployments[].spec.template.spec.containers[] | select(.readinessProbe == null or .livenessProbe == null)' "$CSV"
+  none '.spec.install.spec.deployments[].spec.template.spec.containers[] | select(.readinessProbe == null or .livenessProbe == null)' "$CSV"
 
 # --- Agent router bootstrap --------------------------------------------------
 bootstrap_in_sync() {

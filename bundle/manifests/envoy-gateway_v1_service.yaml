@@ -1,4 +1,3 @@
-# Source: gateway-helm/templates/envoy-gateway-service.yaml
 apiVersion: v1
 kind: Service
 metadata:
@@ -9,7 +8,9 @@ metadata:
     app.kubernetes.io/part-of: envoy-operator
 spec:
   type: ClusterIP
-  selector: {"app.kubernetes.io/name": "envoy-gateway", "control-plane": "envoy-gateway"}
+  selector:
+    app.kubernetes.io/name: envoy-gateway
+    control-plane: envoy-gateway
   ports:
     - name: grpc
       port: 18000

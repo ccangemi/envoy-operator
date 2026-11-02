@@ -106,7 +106,8 @@ cat "$work"/charts/ai-gateway-crds-helm/templates/*.yaml >"$work/crds/ar.yaml"
 
 for f in "$MANIFESTS"/*.yaml; do
   # One document per file, without separators, comments or empty documents.
-  "$YQ" -N 'select(.kind == "CustomResourceDefinition") | ... comments = ""' "$f" >"$f.tmp" && mv "$f.tmp" "$f"
+  "$YQ" -N 'select(.kind == "CustomResourceDefinition") | ... comments = ""' "$f" >"$work/crd.yaml"
+  mv "$work/crd.yaml" "$f"
   group=$("$YQ" '.spec.group' "$f")
   [[ $group =~ $ALLOWED_CRD_GROUPS ]] || fail "$(basename "$f"): CRD group $group is not allowed in the bundle"
 done
@@ -199,7 +200,8 @@ export EG_SELECTOR AR_SELECTOR PART_OF
                  "labels": {"app.kubernetes.io/name": "envoy-gateway",
                             "control-plane": "envoy-gateway",
                             "app.kubernetes.io/part-of": strenv(PART_OF)}}
-  | .spec.selector = (strenv(EG_SELECTOR) | from_yaml)' \
+  | .spec.selector = (strenv(EG_SELECTOR) | from_yaml)
+  | (.. | select(tag == "!!map" or tag == "!!seq")) style = "" | (... | select(tag == "!!str")) style = "" | ... comments = ""' \
   "$work/eg.yaml" >"$MANIFESTS/envoy-gateway_v1_service.yaml"
 
 # The OpenShift service CA creates the secret ai-gateway-controller-tls with a
@@ -209,7 +211,8 @@ export EG_SELECTOR AR_SELECTOR PART_OF
                  "labels": {"app.kubernetes.io/name": "ai-gateway-controller",
                             "app.kubernetes.io/part-of": strenv(PART_OF)},
                  "annotations": {"service.beta.openshift.io/serving-cert-secret-name": "ai-gateway-controller-tls"}}
-  | .spec.selector = (strenv(AR_SELECTOR) | from_yaml)' \
+  | .spec.selector = (strenv(AR_SELECTOR) | from_yaml)
+  | (.. | select(tag == "!!map" or tag == "!!seq")) style = "" | (... | select(tag == "!!str")) style = "" | ... comments = ""' \
   "$work/ar.yaml" >"$MANIFESTS/ai-gateway-controller_v1_service.yaml"
 
 # The OpenShift service CA writes its CA bundle into this config map. The
@@ -349,7 +352,8 @@ log "writing the ClusterServiceVersion $CSV_NAME"
       "kind": .spec.names.kind,
       "version": (.spec.versions[] | select(.storage) | .name),
       "displayName": strenv(DISPLAY),
-      "description": ((.spec.versions[] | select(.storage) | .schema.openAPIV3Schema.description // .spec.names.kind)
+      "description": (.spec.names.kind as $kind
+                      | ((.spec.versions[] | select(.storage) | .schema.openAPIV3Schema.description) // $kind)
                       | split("\n") | join(" ") | sub("\. .*$", ".") )
     }]' "$f"
   done
@@ -396,6 +400,7 @@ W=$work "$YQ" '
   | .spec.replaces = strenv(REPLACES)
   | del(.spec.replaces | select(. == ""))
   | (.. | select(tag == "!!map" or tag == "!!seq")) style = ""
+  | (... | select(tag == "!!str" and (test("\n") | not))) style = ""
   | ... comments = ""' \
   "$ROOT_DIR/config/manifests/csv-template.yaml" >"$MANIFESTS/$PACKAGE_NAME.clusterserviceversion.yaml"
 
@@ -415,8 +420,11 @@ annotations:
   com.redhat.openshift.versions: $OPENSHIFT_VERSIONS
 EOF
 
+# The scorecard test image must match the operator-sdk version in tools.sh.
+SDK_VERSION=$(sed -n 's/^OPERATOR_SDK_VERSION=//p' "$ROOT_DIR/hack/tools.sh")
+[[ -n $SDK_VERSION ]] || fail "cannot read OPERATOR_SDK_VERSION from hack/tools.sh"
 mkdir -p "$BUNDLE_DIR/tests/scorecard"
-cat >"$BUNDLE_DIR/tests/scorecard/config.yaml" <<'EOF'
+cat >"$BUNDLE_DIR/tests/scorecard/config.yaml" <<EOF
 apiVersion: scorecard.operatorframework.io/v1alpha3
 kind: Configuration
 metadata:
@@ -425,12 +433,12 @@ stages:
   - parallel: true
     tests:
       - entrypoint: [scorecard-test, basic-check-spec]
-        image: quay.io/operator-framework/scorecard-test:v1.42.3
+        image: quay.io/operator-framework/scorecard-test:$SDK_VERSION
         labels:
           suite: basic
           test: basic-check-spec-test
       - entrypoint: [scorecard-test, olm-bundle-validation]
-        image: quay.io/operator-framework/scorecard-test:v1.42.3
+        image: quay.io/operator-framework/scorecard-test:$SDK_VERSION
         labels:
           suite: olm
           test: olm-bundle-validation-test

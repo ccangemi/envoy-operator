@@ -15,15 +15,23 @@
 #   - It plays the role of the OpenShift service CA: it creates the serving
 #     certificate secret of the agent router webhook and writes the CA into
 #     the config map that the bundle creates.
+#   - It plays the role of the restricted-v2 SCC for the user ID: a
+#     MutatingAdmissionPolicy gives a numeric user ID to the pods without
+#     runAsUser in the test namespaces. Some upstream images run as the
+#     non-numeric user "nonroot", which the kubelet refuses with
+#     runAsNonRoot when no runAsUser is set.
 #   - It skips the nonroot-v2 RoleBinding of the examples (kind has no SCC).
 # What it cannot test: SCCs and the real service CA. hack/e2e/ocp.sh covers
 # them on OpenShift.
+
+# Set before lib.sh, which defaults to oc.
+KUBECTL=${KUBECTL:-kubectl}
+TIMEOUT=${TIMEOUT:-300}
 
 # shellcheck source=hack/e2e/lib.sh
 source "$(dirname "$0")/lib.sh"
 require_tools KIND OPERATOR_SDK OPM YQ
 
-KUBECTL=${KUBECTL:-kubectl}
 CONTAINER_TOOL=${CONTAINER_TOOL:-docker}
 CLUSTER=${CLUSTER:-envoy-operator-e2e}
 NODE_IMAGE=${NODE_IMAGE:-kindest/node:v1.35.8@sha256:07b2536e30b803ed61d1677a79df6115f798ce64c80f9e22f6ed45afd09323c0}
@@ -68,6 +76,10 @@ create_cluster() {
   "$KIND" create cluster --name "$CLUSTER" --image "$NODE_IMAGE" --wait 120s --config - <<EOF
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
+featureGates:
+  MutatingAdmissionPolicy: true
+runtimeConfig:
+  admissionregistration.k8s.io/v1beta1: "true"
 containerdConfigPatches:
   - |-
     [plugins."io.containerd.grpc.v1.cri".registry]
@@ -100,6 +112,43 @@ install_platform() {
     "https://github.com/kubernetes-sigs/gateway-api/releases/download/$GATEWAY_API_VERSION/standard-install.yaml" >/dev/null
   mkdir -p "$ROOT_DIR/build"
   gateway_api_snapshot >"$SNAPSHOT_FILE"
+  log "installing the fake SCC user ID policy"
+  k apply -f - >/dev/null <<EOF
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingAdmissionPolicy
+metadata:
+  name: e2e-fake-scc-uid
+spec:
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE"]
+        resources: ["pods"]
+  matchConditions:
+    - name: no-pod-user-id
+      expression: "!has(object.spec.securityContext) || !has(object.spec.securityContext.runAsUser)"
+  failurePolicy: Fail
+  reinvocationPolicy: Never
+  mutations:
+    - patchType: ApplyConfiguration
+      applyConfiguration:
+        expression: >-
+          Object{spec: Object.spec{securityContext: Object.spec.securityContext{runAsUser: 1000700000}}}
+---
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingAdmissionPolicyBinding
+metadata:
+  name: e2e-fake-scc-uid
+spec:
+  policyName: e2e-fake-scc-uid
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values: [$NS, $TEST_NS]
+EOF
   log "installing OLM $OLM_VERSION"
   "$OPERATOR_SDK" olm install --version "$OLM_VERSION" --timeout 5m >/dev/null
 }
@@ -161,7 +210,11 @@ EOF
   # installation.
   inject_service_ca &
   local injector=$!
-  install_operator || true
+  if ! install_operator; then
+    wait "$injector" || true
+    dump_debug
+    finish
+  fi
   wait "$injector" || true
 
   verify_operator
