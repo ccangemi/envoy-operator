@@ -41,10 +41,10 @@ and the changes that need action.
 5. Check whether the agent router still needs the webhook bootstrap (see
    [openshift.md](openshift.md#the-agent-router-webhook)).
 6. Run `make check`.
-7. Push the branch. The CI runs the kind end-to-end test and pushes test
-   images. Run the OpenShift end-to-end test with these images (see
-   [development.md](development.md#test-on-openshift)), including an upgrade
-   from the previous version.
+7. Push the branch. The CI runs the kind end-to-end test. Run the runtime
+   test on OpenShift (see [development.md](development.md#test-on-openshift)).
+   After the publication in the community catalog, test the upgrade from the
+   previous version with `hack/e2e/ocp.sh`.
 8. Open a pull request.
 
 The weekly workflow `upstream-check` opens an issue when a new upstream

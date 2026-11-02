@@ -150,7 +150,7 @@ stores the bundle compressed in a config map (limit 1 MiB). The compressed
 manifests are about 0.6 MB, and the gate fails above 900 kB.
 
 A catalog cannot serve this bundle inline: the bundle objects are larger than
-the 2 MiB gRPC message limit of OLM. The test catalog
+the 2 MiB gRPC message limit of OLM. The local test catalog of the kind test
 (`hack/build-catalog.sh`) therefore stores only the CSV metadata
 (`olm.csv.metadata`), like the community catalogs, and OLM pulls the bundle
 image.

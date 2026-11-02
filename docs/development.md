@@ -59,45 +59,49 @@ cluster.
 
 ## Test on OpenShift
 
-You need a cluster with OpenShift 4.22 and a catalog image that the cluster
-can pull. The `Images` workflow pushes one for each push to a `feature/**`
-branch:
+The operator is published only in the OpenShift community catalog. This
+project does not publish its own images or catalogs.
 
-```
-ghcr.io/<owner>/envoy-operator-catalog:sha-<commit>
-ghcr.io/<owner>/envoy-operator-catalog:<branch name with "-" instead of "/">
-```
-
-The packages on ghcr.io are private after the first push. Make them public
-(package settings on GitHub), or add a pull secret to the cluster.
-
-Log in with a kubeconfig file outside the repository, then run the test:
+Log in with a kubeconfig file outside the repository:
 
 ```console
 $ export KUBECONFIG=~/.kube/my-lab
 $ oc login --server=https://api.<cluster>:6443 ...
-$ CATALOG_IMAGE=ghcr.io/<owner>/envoy-operator-catalog:sha-<commit> hack/e2e/ocp.sh all
+```
+
+### Before the publication: runtime test without OLM
+
+`hack/e2e/direct-install.sh apply` installs the bundle from `bundle/` without
+OLM: it turns the ClusterServiceVersion into plain objects, as OLM does. It
+tests the runtime on OpenShift: SCCs, certgen, the webhook bootstrap with the
+service CA, and the traffic through a Gateway.
+
+```console
+$ hack/e2e/direct-install.sh apply
+$ hack/e2e/ocp.sh verify
+$ hack/e2e/ocp.sh test
+$ hack/e2e/ocp.sh uninstall && hack/e2e/direct-install.sh delete
+```
+
+The installation through OLM is tested by the kind end-to-end test in the CI,
+and by the pipeline of the community catalog on the pull request.
+
+### After the publication: install from the community catalog
+
+```console
+$ hack/e2e/ocp.sh all
 ```
 
 The commands of `hack/e2e/ocp.sh`:
 
 | Command | What it does |
 |---|---|
-| `catalog` | Creates a CatalogSource for `CATALOG_IMAGE` in `envoy-gateway-system`. |
+| `catalog` | Checks that the CatalogSource `community-operators` is ready and has the package `envoy-operator`. |
 | `install` | Saves a snapshot of the Gateway API CRDs, then installs the operator through OLM. |
 | `verify` | Checks the operator, the SCCs, the webhook, and that the Gateway API CRDs did not change. |
 | `test` | Applies `samples/ocp` and sends a chat completion through the Gateway. |
 | `uninstall` | Deletes the examples and the operator, and checks that the webhook is gone. |
 | `all` | `catalog`, `install`, `verify`, `test`. |
-
-### Without an image registry
-
-`hack/e2e/direct-install.sh apply` installs the bundle without OLM: it turns
-the ClusterServiceVersion into plain objects, as OLM does. Use it to test the
-runtime (SCCs, certgen, webhook bootstrap, traffic) when the cluster cannot
-pull a bundle image. Then run `hack/e2e/ocp.sh verify` and
-`hack/e2e/ocp.sh test`. It does not test OLM, so always run the full test
-before a release.
 
 ## Commits and branches
 
@@ -110,12 +114,15 @@ before a release.
 
 1. Make sure that `versions.env` has the new `OPERATOR_VERSION`, the right
    `CHANNEL` and `REPLACES`, and that `bundle/` is up to date.
-2. Run the OpenShift end-to-end test with the images of the release commit,
-   including the upgrade from the previous version.
+2. Run the runtime test on OpenShift (see above).
 3. Create and push the tag `v<OPERATOR_VERSION>` on `main`.
-4. The `Release` workflow checks the bundle again, pushes the images to
-   ghcr.io and creates a GitHub release. The release has an archive with the
-   directory `operators/envoy-operator/<version>/` for the community catalog.
+4. The `Release` workflow runs all checks again and creates a GitHub release
+   with an archive of the directory `operators/envoy-operator/<version>/`.
+5. Open the pull request to the community catalog with that directory (see
+   [community/README.md](../community/README.md)). The community pipeline
+   builds the bundle image, tests it and publishes it.
+6. After the publication, run `hack/e2e/ocp.sh all` on OpenShift, including
+   the upgrade from the previous version.
 
 ## Community catalog
 
