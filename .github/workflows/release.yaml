@@ -1,0 +1,57 @@
+# Release: runs when you push a tag v<OPERATOR_VERSION>, for example v0.1.0.
+# It checks the bundle again, pushes the bundle and catalog images to ghcr.io,
+# and creates a GitHub release. The release has an archive with the
+# operators/envoy-operator/<version>/ directory for the community catalog
+# pull request.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check that the tag matches versions.env
+        run: |
+          source versions.env
+          if [[ "${GITHUB_REF_NAME}" != "v${OPERATOR_VERSION}" ]]; then
+            echo "ERROR: tag ${GITHUB_REF_NAME} does not match OPERATOR_VERSION=${OPERATOR_VERSION} in versions.env" >&2
+            exit 1
+          fi
+      - name: Install the pinned tools
+        run: make tools
+      - name: Check the bundle
+        run: |
+          make bundle-check
+          make bundle-gate
+          make validate
+      - name: Log in to ghcr.io
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Build and push the images
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: make bundle-image catalog-image push CONTAINER_TOOL=docker IMAGE_REGISTRY="ghcr.io/${OWNER,,}"
+      - name: Prepare the community catalog directory
+        run: |
+          source versions.env
+          hack/community-layout.sh build/community
+          tar -C build/community -czf "build/envoy-operator-${OPERATOR_VERSION}-community.tar.gz" operators
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          source versions.env
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "envoy-operator ${OPERATOR_VERSION}" \
+            --notes "Envoy Gateway ${EG_VERSION}, The Agent Router ${AR_VERSION}. OpenShift ${OPENSHIFT_VERSIONS}." \
+            --prerelease="$([[ ${CHANNEL} == alpha ]] && echo true || echo false)" \
+            "build/envoy-operator-${OPERATOR_VERSION}-community.tar.gz"

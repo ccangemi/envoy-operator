@@ -1,0 +1,53 @@
+# Once a week, checks for new stable releases of Envoy Gateway and The Agent
+# Router. When versions.env is behind, it opens an issue (only one per
+# version).
+name: Upstream check
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    name: Check upstream releases
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Compare versions.env with the latest releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          source versions.env
+          latest() { gh api "repos/$1/releases/latest" --jq .tag_name; }
+          check() {
+            local name=$1 repo=$2 current=$3 newest title
+            newest=$(latest "$repo")
+            if [[ "$newest" == "$current" ]]; then
+              echo "$name: $current is the latest release"
+              return
+            fi
+            title="Upstream: $name $newest is available (versions.env has $current)"
+            if gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[].number' | grep -q .; then
+              echo "$name: an issue for $newest is already open"
+              return
+            fi
+            gh issue create --title "$title" --body "$(printf '%s\n' \
+              "A new release of $name is available: https://github.com/$repo/releases/tag/$newest" \
+              "" \
+              "To update the operator:" \
+              "" \
+              "1. Create a feature branch." \
+              "2. Change the version in versions.env and run make bundle." \
+              "3. Read the upstream release notes, in particular the Gateway API version that the release needs." \
+              "4. Run make check, then the end-to-end test on OpenShift 4.22 (docs/development.md)." \
+              "5. Open a pull request.")"
+            echo "$name: opened an issue for $newest"
+          }
+          check "Envoy Gateway" envoyproxy/gateway "$EG_VERSION"
+          check "The Agent Router" theagentrouter/agent-router "$AR_VERSION"
