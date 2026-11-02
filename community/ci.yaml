@@ -6,9 +6,8 @@
 # https://github.com/redhat-openshift-ecosystem/operator-pipelines/tree/main/docs/users
 updateGraph: replaces-mode
 # GitHub user names that can approve changes to this operator.
-# TODO: add the personal GitHub accounts of the maintainers before the first
-# pull request.
-reviewers: []
+reviewers:
+  - amedeos
 fbc:
   enabled: true
   catalog_mapping:

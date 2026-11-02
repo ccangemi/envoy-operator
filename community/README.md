@@ -14,7 +14,7 @@ release.
 
 ## Prepare the pull request
 
-1. Add the GitHub user names of the maintainers to `reviewers` in
+1. Check the GitHub user names of the maintainers in `reviewers` in
    `ci.yaml`.
 2. Run `make community` (or download the archive from the GitHub release).
    It writes `build/community/operators/envoy-operator/`.
