@@ -20,6 +20,14 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Check that the tagged commit is on main
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "ERROR: the tag ${GITHUB_REF_NAME} is not on main. Release only from main." >&2
+            exit 1
+          fi
       - name: Check that the tag matches versions.env
         run: |
           source versions.env
@@ -29,11 +37,12 @@ jobs:
           fi
       - name: Install the pinned tools
         run: make tools
-      - name: Check the bundle
+      - name: Install yamllint
+        run: pipx install yamllint
+      - name: Run all checks
         run: |
           make bundle-check
-          make bundle-gate
-          make validate
+          make check
       - name: Log in to ghcr.io
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
       - name: Build and push the images
