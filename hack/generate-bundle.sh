@@ -347,6 +347,7 @@ log "writing the ClusterServiceVersion $CSV_NAME"
     kind=$("$YQ" '.spec.names.kind' "$f")
     display=$(sed -E 's/([a-z0-9])([A-Z])/\1 \2/g; s/([A-Z]+)([A-Z][a-z])/\1 \2/g' <<<"$kind")
     echo "---"
+    # shellcheck disable=SC2016 # $kind is a yq variable, not a shell variable
     DISPLAY=$display "$YQ" '[{
       "name": .metadata.name,
       "kind": .spec.names.kind,
