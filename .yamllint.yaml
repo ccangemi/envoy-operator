@@ -1,0 +1,15 @@
+extends: default
+ignore: |
+  bin/
+  build/
+  bundle/
+rules:
+  line-length:
+    max: 140
+  document-start: disable
+  truthy:
+    check-keys: false
+  comments:
+    min-spaces-from-content: 1
+  indentation:
+    indent-sequences: consistent

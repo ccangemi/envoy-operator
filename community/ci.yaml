@@ -1,0 +1,17 @@
+---
+# ci.yaml for operators/envoy-operator in
+# redhat-openshift-ecosystem/community-operators-prod.
+# Check the current format in the operator-pipelines documentation before the
+# first pull request:
+# https://github.com/redhat-openshift-ecosystem/operator-pipelines/tree/main/docs/users
+updateGraph: replaces-mode
+# GitHub user names that can approve changes to this operator.
+# TODO: add the personal GitHub accounts of the maintainers before the first
+# pull request.
+reviewers: []
+fbc:
+  enabled: true
+  catalog_mapping:
+    - template_name: basic.yaml
+      catalog_names: ["v4.22"]
+      type: olm.template.basic

@@ -1,0 +1,139 @@
+# Base of the ClusterServiceVersion. hack/generate-bundle.sh adds the name,
+# the version, the install strategy, the owned CRDs, the related images, the
+# icon and the examples.
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  name: envoy-operator.v0.0.0
+  annotations:
+    capabilities: Basic Install
+    categories: Networking,AI/Machine Learning
+    description: >-
+      Installs Envoy Gateway and The Agent Router (formerly Envoy AI Gateway) on
+      OpenShift, on top of the Gateway API that OpenShift provides.
+    repository: https://github.com/ccangemi/envoy-operator
+    support: Community
+    operatorframework.io/suggested-namespace: envoy-gateway-system
+    features.operators.openshift.io/disconnected: "true"
+    features.operators.openshift.io/fips-compliant: "false"
+    features.operators.openshift.io/proxy-aware: "false"
+    features.operators.openshift.io/tls-profiles: "false"
+    features.operators.openshift.io/token-auth-aws: "false"
+    features.operators.openshift.io/token-auth-azure: "false"
+    features.operators.openshift.io/token-auth-gcp: "false"
+    features.operators.openshift.io/cnf: "false"
+    features.operators.openshift.io/cni: "false"
+    features.operators.openshift.io/csi: "false"
+  labels:
+    operatorframework.io/arch.amd64: supported
+    operatorframework.io/arch.arm64: supported
+    operatorframework.io/os.linux: supported
+spec:
+  displayName: Envoy Gateway and Agent Router (Community)
+  provider:
+    name: envoy-operator community
+    url: https://github.com/ccangemi/envoy-operator
+  maintainers:
+    - name: Amedeo Salvati
+      email: amedeo@linux.com
+  maturity: alpha
+  minKubeVersion: 1.35.0
+  keywords:
+    - envoy
+    - envoy-gateway
+    - gateway-api
+    - ai-gateway
+    - agent-router
+    - llm
+    - mcp
+  links:
+    - name: Operator source code
+      url: https://github.com/ccangemi/envoy-operator
+    - name: Envoy Gateway
+      url: https://gateway.envoyproxy.io/
+    - name: The Agent Router
+      url: https://github.com/theagentrouter/agent-router
+  installModes:
+    - type: OwnNamespace
+      supported: false
+    - type: SingleNamespace
+      supported: false
+    - type: MultiNamespace
+      supported: false
+    - type: AllNamespaces
+      supported: true
+  # The Gateway API comes from OpenShift, not from OLM. OLM refuses to install
+  # the operator when the cluster does not serve these APIs. BackendTLSPolicy v1
+  # arrives with Gateway API v1.4, which OpenShift 4.22 provides.
+  nativeAPIs:
+    - group: gateway.networking.k8s.io
+      version: v1
+      kind: GatewayClass
+    - group: gateway.networking.k8s.io
+      version: v1
+      kind: Gateway
+    - group: gateway.networking.k8s.io
+      version: v1
+      kind: HTTPRoute
+    - group: gateway.networking.k8s.io
+      version: v1
+      kind: BackendTLSPolicy
+  description: |
+    This community operator installs two controllers on OpenShift:
+
+    * [Envoy Gateway](https://gateway.envoyproxy.io/) __EG_VERSION__, which
+      implements the Kubernetes Gateway API with Envoy Proxy.
+    * [The Agent Router](https://github.com/theagentrouter/agent-router)
+      __AR_VERSION__ (formerly Envoy AI Gateway), which adds AI traffic
+      features to Envoy Gateway: routing to LLM providers, token based rate
+      limits, provider fallback and MCP routing.
+
+    The operator uses the Gateway API that OpenShift provides. It never
+    installs, changes or removes the Gateway API CRDs
+    (`gateway.networking.k8s.io`), which belong to the OpenShift Ingress
+    Operator.
+
+    ## Before you install
+
+    * OpenShift 4.22 or later. The operator needs Gateway API v1.4
+      (`BackendTLSPolicy` v1), which OpenShift 4.22 provides.
+    * Install the operator in the namespace `envoy-gateway-system`, with the
+      "All namespaces" install mode. The operator does not start in another
+      namespace.
+
+    ## What the operator installs
+
+    * The Envoy Gateway controller and the agent router controller, in
+      `envoy-gateway-system`.
+    * The Envoy Gateway CRDs (`gateway.envoyproxy.io`) and the agent router
+      CRDs (`aigateway.envoyproxy.io`).
+    * A mutating webhook that adds the agent router external processor to the
+      Envoy proxy pods. The OpenShift service CA issues and rotates its
+      certificate.
+
+    The operator does not create a GatewayClass, a Gateway or any route. You
+    create them, for example with a Helm chart or with Argo CD.
+
+    ## OpenShift notes
+
+    * The controllers run with the `restricted-v2` security context
+      constraint.
+    * Envoy Gateway always runs the Envoy proxy pods with the fixed user ID
+      65532, which `restricted-v2` does not allow. Each Gateway gets a
+      service account with the same name as the Gateway, in the Gateway
+      namespace. Give that service account the `nonroot-v2` security context
+      constraint with a RoleBinding to the cluster role
+      `system:openshift:scc:nonroot-v2`. The operator documentation has an
+      example.
+    * The operator does not install the Gateway API Inference Extension CRDs
+      (`InferencePool`). OpenShift AI provides them. On other clusters, install
+      them yourself and restart the agent router controller.
+
+    ## Documentation
+
+    See the [operator repository](https://github.com/ccangemi/envoy-operator)
+    for the installation guide, the upgrade notes and the troubleshooting
+    guide.
+
+    This is a community project. It is not affiliated with, or endorsed by,
+    the Envoy project.

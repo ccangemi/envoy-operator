@@ -9,3 +9,5 @@
 kubeconfig*
 *.kubeconfig
 .kube/
+/build/
+__pycache__/

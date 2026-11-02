@@ -1,0 +1,8 @@
+# A GatewayClass for Envoy Gateway. It is cluster scoped and independent from
+# the GatewayClass that OpenShift uses for its own Gateway API implementation.
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: agent-router
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
