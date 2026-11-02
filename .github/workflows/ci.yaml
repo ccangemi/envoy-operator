@@ -1,4 +1,4 @@
-# Offline checks: lint, bundle generation, safety gate, OLM validation, DCO.
+# Offline checks: lint, bundle generation, bundle gate, OLM validation, DCO.
 name: CI
 
 on:
@@ -36,9 +36,9 @@ jobs:
         run: make tools
       - name: Regenerate the bundle and compare it with the committed files
         run: make bundle-check
-      - name: Run the safety gate
+      - name: Run the bundle gate
         run: make bundle-gate
-      - name: Test the safety gate
+      - name: Test the bundle gate
         run: make test-gate
       - name: Validate the bundle with operator-sdk
         run: make validate

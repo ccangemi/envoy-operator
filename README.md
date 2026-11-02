@@ -64,7 +64,7 @@ the upstream Helm charts.
 |---|---|
 | `versions.env` | The versions of the operator and of the upstream components |
 | `config/` | Inputs of the bundle generator: Helm values, CSV template, bootstrap script |
-| `hack/` | Scripts: tools, generator, safety gate, catalog, end-to-end tests |
+| `hack/` | Scripts: tools, generator, bundle gate, catalog, end-to-end tests |
 | `bundle/` | The generated OLM bundle (committed, do not edit by hand) |
 | `samples/ocp/` | An example Gateway for OpenShift |
 | `community/` | Files for the community catalog pull request |

@@ -4,8 +4,9 @@ With Red Hat Advanced Cluster Management (ACM), a governance policy can
 install the operator on the managed clusters. The `OperatorPolicy` kind
 manages the namespace, the OperatorGroup and the Subscription for you.
 
-The Gateway resources (GatewayClass, Gateways, routes) are application
-resources. Manage them separately, for example with Argo CD.
+The policy does not manage the Gateway resources (GatewayClass, Gateways,
+routes). Users create them, so manage them separately, for example with
+Argo CD.
 
 ## Example
 
