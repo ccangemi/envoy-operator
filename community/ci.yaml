@@ -9,6 +9,7 @@ updateGraph: replaces-mode
 reviewers:
   - amedeos
   - ccangemi
+  - gpillon
 fbc:
   enabled: true
   catalog_mapping:
