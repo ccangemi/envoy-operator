@@ -68,8 +68,13 @@ resolve_digest() {
   printf '%s\n' "$digest"
 }
 
-# pin <registry/repository:tag> prints repository@digest.
+# pin <registry/repository:tag> prints repository@digest. A reference that
+# already has a digest is printed as it is.
 pin() {
   local ref=$1
+  if [[ $ref == *@sha256:* ]]; then
+    printf '%s\n' "$ref"
+    return
+  fi
   printf '%s@%s\n' "${ref%:*}" "$(resolve_digest "$ref")"
 }
