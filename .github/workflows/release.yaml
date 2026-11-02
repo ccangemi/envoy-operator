@@ -1,8 +1,8 @@
 # Release: runs when you push a tag v<OPERATOR_VERSION>, for example v0.1.0.
-# It checks the bundle again, pushes the bundle and catalog images to ghcr.io,
-# and creates a GitHub release. The release has an archive with the
-# operators/envoy-operator/<version>/ directory for the community catalog
-# pull request.
+# It runs all checks again and creates a GitHub release with an archive of
+# the operators/envoy-operator/<version>/ directory for the community catalog
+# pull request. The project publishes no images: the community catalog
+# pipeline builds the bundle image.
 name: Release
 
 on:
@@ -11,7 +11,6 @@ on:
 
 permissions:
   contents: write
-  packages: write
 
 jobs:
   release:
@@ -43,12 +42,6 @@ jobs:
         run: |
           make bundle-check
           make check
-      - name: Log in to ghcr.io
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-      - name: Build and push the images
-        env:
-          OWNER: ${{ github.repository_owner }}
-        run: make bundle-image catalog-image push CONTAINER_TOOL=docker IMAGE_REGISTRY="ghcr.io/${OWNER,,}"
       - name: Prepare the community catalog directory
         run: |
           source versions.env

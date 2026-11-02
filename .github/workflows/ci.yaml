@@ -43,9 +43,7 @@ jobs:
       - name: Validate the bundle with operator-sdk
         run: make validate
       - name: Build and validate a test catalog
-        env:
-          OWNER: ${{ github.repository_owner }}
-        run: make catalog BUNDLE_IMAGE="ghcr.io/${OWNER,,}/envoy-operator-bundle:ci"
+        run: make catalog BUNDLE_IMAGE=localhost:5001/envoy-operator-bundle:ci
       - name: Upload the bundle
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
