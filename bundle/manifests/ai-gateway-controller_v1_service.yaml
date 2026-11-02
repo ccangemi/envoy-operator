@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-gateway-controller
+  labels:
+    app.kubernetes.io/name: ai-gateway-controller
+    app.kubernetes.io/part-of: envoy-operator
+  annotations:
+    service.beta.openshift.io/serving-cert-secret-name: ai-gateway-controller-tls
+spec:
+  type: ClusterIP
+  ports:
+    - appProtocol: http
+      name: mutating-webhook
+      port: 9443
+      protocol: TCP
+      targetPort: 9443
+    - appProtocol: grpc
+      name: grpc
+      port: 1063
+      protocol: TCP
+      targetPort: 1063
+    - appProtocol: http
+      name: http-metrics
+      port: 8080
+      protocol: TCP
+      targetPort: 8080
+    - appProtocol: grpc
+      name: ratelimit-xds
+      port: 18002
+      protocol: TCP
+      targetPort: 18002
+  selector: {"app.kubernetes.io/name": "ai-gateway-controller"}
+# Source: ai-gateway-helm/templates/deployment.yaml
+# Copyright Envoy AI Gateway Authors
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.

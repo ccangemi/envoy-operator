@@ -1,0 +1,61 @@
+# Values for rendering the upstream gateway-helm chart. hack/generate-bundle.sh
+# takes the controller Deployment, its RBAC and its configuration from the
+# result and turns them into bundle manifests.
+#
+# Most settings come from charts/agent-router-ocp, which was tested on
+# OpenShift 4.22.
+
+# Never render the Gateway API CRDs: the OpenShift Ingress Operator owns them.
+# The Envoy Gateway CRDs come from gateway-crds-helm.
+crds:
+  enabled: false
+createNamespace: false
+fullnameOverride: envoy-gateway
+
+# The topology injector is a cluster-wide pod webhook that adds zone labels.
+# It is not needed, and it would leave a webhook behind after uninstall.
+topologyInjector:
+  enabled: false
+
+config:
+  envoyGateway:
+    gateway:
+      controllerName: gateway.envoyproxy.io/gatewayclass-controller
+    logging:
+      level:
+        default: info
+    provider:
+      type: Kubernetes
+      kubernetes:
+        # Each Gateway gets its proxy Deployment, Service and ServiceAccount in
+        # its own namespace. Never add a "watch" block: the controller then
+        # loses its cluster-wide RBAC and fails.
+        deploy:
+          type: GatewayNamespace
+    # What the agent router needs from Envoy Gateway. Taken from the upstream
+    # file manifests/envoy-gateway-values.yaml of the agent router.
+    extensionApis:
+      enableEnvoyPatchPolicy: true
+      enableBackend: true
+    extensionManager:
+      hooks:
+        xdsTranslator:
+          translation:
+            listener:
+              includeAll: true
+            route:
+              includeAll: true
+            cluster:
+              includeAll: true
+            secret:
+              includeAll: true
+          post:
+            - Translation
+            - Cluster
+            - Route
+      service:
+        fqdn:
+          # Replaced by the generator with the address of the agent router
+          # controller Service in OPERATOR_NAMESPACE.
+          hostname: ai-gateway-controller.OPERATOR_NAMESPACE.svc.cluster.local
+          port: 1063

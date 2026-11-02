@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-gateway-controller-service-ca
+  labels:
+    app.kubernetes.io/name: ai-gateway-controller
+    app.kubernetes.io/part-of: envoy-operator
+  annotations:
+    service.beta.openshift.io/inject-cabundle: "true"

@@ -1,0 +1,18 @@
+# Envoy Gateway always runs the Envoy proxy with the fixed user ID 65532, which
+# the restricted-v2 SCC does not allow. Each Gateway gets a service account
+# with the same name as the Gateway. This RoleBinding gives that service
+# account the nonroot-v2 SCC. Add one subject for every Gateway in the
+# namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: nonroot-v2-envoy-proxies
+  namespace: ar-test
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:openshift:scc:nonroot-v2
+subjects:
+  - kind: ServiceAccount
+    name: agent-router-basic
+    namespace: ar-test

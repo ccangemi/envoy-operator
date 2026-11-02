@@ -1,0 +1,13 @@
+# Values for rendering the upstream ai-gateway-helm chart (The Agent Router).
+# hack/generate-bundle.sh takes the controller Deployment and its RBAC from the
+# result and turns them into bundle manifests.
+
+envoyGateway:
+  # Replaced by the generator with OPERATOR_NAMESPACE. Envoy Gateway and the
+  # agent router run in the same namespace.
+  namespace: OPERATOR_NAMESPACE
+controller:
+  quotaRateLimitServiceAddr: envoy-ai-gateway-ratelimit.OPERATOR_NAMESPACE
+  mutatingWebhook:
+    certManager:
+      enable: false

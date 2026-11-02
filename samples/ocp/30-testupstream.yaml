@@ -1,0 +1,59 @@
+# A fake OpenAI-compatible backend from the agent router project. It answers
+# every chat completion request with a test response.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: testupstream
+  namespace: ar-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: testupstream
+  template:
+    metadata:
+      labels:
+        app: testupstream
+    spec:
+      containers:
+        - name: testupstream
+          image: docker.io/envoyproxy/ai-gateway-testupstream@sha256:09f6e0a64ce426ee5bd1d4d9c495f53626a3c01c824e0bd68d639604a75439df
+          ports:
+            - containerPort: 8080
+          env:
+            - name: TESTUPSTREAM_ID
+              value: test
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: testupstream
+  namespace: ar-test
+spec:
+  selector:
+    app: testupstream
+  ports:
+    - port: 80
+      targetPort: 8080

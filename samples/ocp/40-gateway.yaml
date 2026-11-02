@@ -1,0 +1,87 @@
+# The data plane settings for the example Gateway: a ClusterIP Service and
+# small resource requests. Expose the Gateway with an OpenShift Route, or
+# change the Service type.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: agent-router-basic
+  namespace: ar-test
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        type: ClusterIP
+      envoyDeployment:
+        container:
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: agent-router-basic
+  namespace: ar-test
+spec:
+  gatewayClassName: agent-router
+  infrastructure:
+    parametersRef:
+      group: gateway.envoyproxy.io
+      kind: EnvoyProxy
+      name: agent-router-basic
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+---
+# Where the backend lives. Envoy Gateway "Backend" resources are enabled by
+# the operator configuration.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: testupstream
+  namespace: ar-test
+spec:
+  endpoints:
+    - fqdn:
+        hostname: testupstream.ar-test.svc.cluster.local
+        port: 80
+---
+# The backend speaks the OpenAI API.
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: AIServiceBackend
+metadata:
+  name: testupstream
+  namespace: ar-test
+spec:
+  schema:
+    name: OpenAI
+  backendRef:
+    group: gateway.envoyproxy.io
+    kind: Backend
+    name: testupstream
+---
+# Requests for the model "test-model" go to the test backend.
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: AIGatewayRoute
+metadata:
+  name: agent-router-basic
+  namespace: ar-test
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: agent-router-basic
+  rules:
+    - matches:
+        - headers:
+            - type: Exact
+              name: x-ai-eg-model
+              value: test-model
+      backendRefs:
+        - name: testupstream

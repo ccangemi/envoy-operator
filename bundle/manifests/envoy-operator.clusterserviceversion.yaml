@@ -1,0 +1,1034 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  name: envoy-operator.v0.1.0
+  annotations:
+    capabilities: Basic Install
+    categories: Networking,AI/Machine Learning
+    description: >-
+      Installs Envoy Gateway and The Agent Router (formerly Envoy AI Gateway) on OpenShift, on top of the Gateway API that OpenShift provides.
+    repository: https://github.com/ccangemi/envoy-operator
+    support: Community
+    operatorframework.io/suggested-namespace: envoy-gateway-system
+    features.operators.openshift.io/disconnected: "true"
+    features.operators.openshift.io/fips-compliant: "false"
+    features.operators.openshift.io/proxy-aware: "false"
+    features.operators.openshift.io/tls-profiles: "false"
+    features.operators.openshift.io/token-auth-aws: "false"
+    features.operators.openshift.io/token-auth-azure: "false"
+    features.operators.openshift.io/token-auth-gcp: "false"
+    features.operators.openshift.io/cnf: "false"
+    features.operators.openshift.io/cni: "false"
+    features.operators.openshift.io/csi: "false"
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "gateway.envoyproxy.io/v1alpha1",
+          "kind": "EnvoyProxy",
+          "metadata": {
+            "name": "agent-router-basic"
+          },
+          "spec": {
+            "provider": {
+              "type": "Kubernetes",
+              "kubernetes": {
+                "envoyService": {
+                  "type": "ClusterIP"
+                },
+                "envoyDeployment": {
+                  "container": {
+                    "resources": {
+                      "requests": {
+                        "cpu": "100m",
+                        "memory": "128Mi"
+                      },
+                      "limits": {
+                        "cpu": "1",
+                        "memory": "512Mi"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "gateway.envoyproxy.io/v1alpha1",
+          "kind": "Backend",
+          "metadata": {
+            "name": "testupstream"
+          },
+          "spec": {
+            "endpoints": [
+              {
+                "fqdn": {
+                  "hostname": "testupstream.ar-test.svc.cluster.local",
+                  "port": 80
+                }
+              }
+            ]
+          }
+        },
+        {
+          "apiVersion": "aigateway.envoyproxy.io/v1beta1",
+          "kind": "AIServiceBackend",
+          "metadata": {
+            "name": "testupstream"
+          },
+          "spec": {
+            "schema": {
+              "name": "OpenAI"
+            },
+            "backendRef": {
+              "group": "gateway.envoyproxy.io",
+              "kind": "Backend",
+              "name": "testupstream"
+            }
+          }
+        },
+        {
+          "apiVersion": "aigateway.envoyproxy.io/v1beta1",
+          "kind": "AIGatewayRoute",
+          "metadata": {
+            "name": "agent-router-basic"
+          },
+          "spec": {
+            "parentRefs": [
+              {
+                "group": "gateway.networking.k8s.io",
+                "kind": "Gateway",
+                "name": "agent-router-basic"
+              }
+            ],
+            "rules": [
+              {
+                "matches": [
+                  {
+                    "headers": [
+                      {
+                        "type": "Exact",
+                        "name": "x-ai-eg-model",
+                        "value": "test-model"
+                      }
+                    ]
+                  }
+                ],
+                "backendRefs": [
+                  {
+                    "name": "testupstream"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    containerImage: docker.io/envoyproxy/ai-gateway-controller@sha256:4d663346354321a677c4e942017277f690d0d7715f8e3348a535db174679e4f8
+    envoy-operator.io/envoy-gateway-version: v1.9.3
+    envoy-operator.io/agent-router-version: v1.2.0
+  labels:
+    operatorframework.io/arch.amd64: supported
+    operatorframework.io/arch.arm64: supported
+    operatorframework.io/os.linux: supported
+spec:
+  displayName: Envoy Gateway and Agent Router (Community)
+  provider:
+    name: envoy-operator community
+    url: https://github.com/ccangemi/envoy-operator
+  maintainers:
+    - name: Amedeo Salvati
+      email: amedeo@linux.com
+  maturity: alpha
+  minKubeVersion: 1.35.0
+  keywords:
+    - envoy
+    - envoy-gateway
+    - gateway-api
+    - ai-gateway
+    - agent-router
+    - llm
+    - mcp
+  links:
+    - name: Operator source code
+      url: https://github.com/ccangemi/envoy-operator
+    - name: Envoy Gateway
+      url: https://gateway.envoyproxy.io/
+    - name: The Agent Router
+      url: https://github.com/theagentrouter/agent-router
+  installModes:
+    - type: OwnNamespace
+      supported: false
+    - type: SingleNamespace
+      supported: false
+    - type: MultiNamespace
+      supported: false
+    - type: AllNamespaces
+      supported: true
+  nativeAPIs:
+    - group: gateway.networking.k8s.io
+      version: v1
+      kind: GatewayClass
+    - group: gateway.networking.k8s.io
+      version: v1
+      kind: Gateway
+    - group: gateway.networking.k8s.io
+      version: v1
+      kind: HTTPRoute
+    - group: gateway.networking.k8s.io
+      version: v1
+      kind: BackendTLSPolicy
+  description: |-
+    This community operator installs two controllers on OpenShift:
+
+    * [Envoy Gateway](https://gateway.envoyproxy.io/) v1.9.3, which
+      implements the Kubernetes Gateway API with Envoy Proxy.
+    * [The Agent Router](https://github.com/theagentrouter/agent-router)
+      v1.2.0 (formerly Envoy AI Gateway), which adds AI traffic
+      features to Envoy Gateway: routing to LLM providers, token based rate
+      limits, provider fallback and MCP routing.
+
+    The operator uses the Gateway API that OpenShift provides. It never
+    installs, changes or removes the Gateway API CRDs
+    (`gateway.networking.k8s.io`), which belong to the OpenShift Ingress
+    Operator.
+
+    ## Before you install
+
+    * OpenShift 4.22 or later. The operator needs Gateway API v1.4
+      (`BackendTLSPolicy` v1), which OpenShift 4.22 provides.
+    * Install the operator in the namespace `envoy-gateway-system`, with the
+      "All namespaces" install mode. The operator does not start in another
+      namespace.
+
+    ## What the operator installs
+
+    * The Envoy Gateway controller and the agent router controller, in
+      `envoy-gateway-system`.
+    * The Envoy Gateway CRDs (`gateway.envoyproxy.io`) and the agent router
+      CRDs (`aigateway.envoyproxy.io`).
+    * A mutating webhook that adds the agent router external processor to the
+      Envoy proxy pods. The OpenShift service CA issues and rotates its
+      certificate.
+
+    The operator does not create a GatewayClass, a Gateway or any route. You
+    create them, for example with a Helm chart or with Argo CD.
+
+    ## OpenShift notes
+
+    * The controllers run with the `restricted-v2` security context
+      constraint.
+    * Envoy Gateway always runs the Envoy proxy pods with the fixed user ID
+      65532, which `restricted-v2` does not allow. Each Gateway gets a
+      service account with the same name as the Gateway, in the Gateway
+      namespace. Give that service account the `nonroot-v2` security context
+      constraint with a RoleBinding to the cluster role
+      `system:openshift:scc:nonroot-v2`. The operator documentation has an
+      example.
+    * The operator does not install the Gateway API Inference Extension CRDs
+      (`InferencePool`). OpenShift AI provides them. On other clusters, install
+      them yourself and restart the agent router controller.
+
+    ## Documentation
+
+    See the [operator repository](https://github.com/ccangemi/envoy-operator)
+    for the installation guide, the upgrade notes and the troubleshooting
+    guide.
+
+    This is a community project. It is not affiliated with, or endorsed by,
+    the Envoy project.
+  version: 0.1.0
+  icon:
+    - base64data: PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHJvbGU9ImltZyIgdmlld0JveD0iLTQuMjEgNDkuNTQgNDM5LjkyIDMzMi42NyI+PHN0eWxlPnN2ZyB7ZW5hYmxlLWJhY2tncm91bmQ6bmV3IDAgMCA0MzIgNDMyfTwvc3R5bGU+PHBhdGggZmlsbD0iI2IzMWFhYiIgZD0iTTEwOS44IDIxMC42bC42IDI1LjQgMjYuOCAxNi42LS42LTI1LjR6bTY1LjQgMTA1LjhsLS42LTI0LjktMjMuNS0xNC42Yy0uMy0uMi0uNy0uNS0xLS43bC42IDI1IDI0LjUgMTUuMnpNOTEuNSAzNTBsLTYxLjMtMzgtMS41LTYzLjcgMzAuMS0xMy0uNi0yNS41LTQ4IDIwLjdjLTMuNyAxLjYtNS45IDUtNS44IDguOWwxLjggNzYuNWMuMSAzLjkgMi41IDcuOCA2LjMgMTAuMkw4NiAzNzEuN2MzLjQgMi4xIDcuNiAyLjcgMTEgMS42LjQtLjEuNy0uMiAxLS40bDQ1LjEtMTkuNC0yNC41LTE1LjJMOTEuNSAzNTB6Ii8+PHBhdGggZmlsbD0iI2QxNjNjZSIgZD0iTTI4OS42IDIwOS4xYy0uMS00LjYtMi45LTkuMS03LjMtMTEuOUwxOTMgMTQxLjlsLTIuOCAxLjIuNiAyNi44IDcwLjcgNDMuOCAxLjcgNzEuNiAyNyAxNi43IDEuNS0uNi0yLjEtOTIuM3pNMTgyLjcgMzM0LjhsLTgyLjktNTEuNC0yLTg2LjMgMzcuOC0xNi4zLS43LTI5LjctNTguNyAyNS4zYy00LjMgMS45LTYuOSA1LjgtNi44IDEwLjRMNzEuNyAyODhjLjEgNC42IDIuOSA5LjEgNy4zIDExLjhsOTcuMiA2MC4zYzQgMi41IDguOCAzLjEgMTIuOSAxLjkuNC0uMS44LS4zIDEuMi0uNWw1Ny40LTI0LjctMjguNi0xNy43LTM2LjQgMTUuN3oiLz48cGF0aCBmaWxsPSIjZTEzZWFmIiBkPSJNNDE1LjkgMTM4LjNMMjkxLjMgNjFjLTQuNi0yLjgtMTAuMS0zLjYtMTQuOC0yLjEtLjUuMS0uOS4zLTEuNC41bC0xMjEuNiA1Mi40Yy00LjkgMi4xLTcuOSA2LjYtNy44IDExLjlsMy4xIDEyOS42Yy4xIDUuMyAzLjMgMTAuNCA4LjQgMTMuNUwyODEuOCAzNDRjNC42IDIuOCAxMC4xIDMuNiAxNC43IDIuMS41LS4xLjktLjMgMS40LS41bDEyMS42LTUyLjRjNC45LTIuMSA3LjktNi43IDcuOC0xMS45bC0zLTEyOS42Yy0uMS01LjEtMy4zLTEwLjMtOC40LTEzLjR6TTI4OS4zIDMxNS4yTDE4MSAyNDguMWwtMi43LTExMi43IDEwNS42LTQ1LjVMMzkyLjIgMTU3bDIuNyAxMTIuNy0xMDUuNiA0NS41eiIvPjwvc3ZnPg==
+      mediatype: image/svg+xml
+  customresourcedefinitions:
+    owned:
+      - name: aigatewayroutes.aigateway.envoyproxy.io
+        kind: AIGatewayRoute
+        version: v1beta1
+        displayName: AI Gateway Route
+        description: AIGatewayRoute combines multiple AIServiceBackends and attaching them to Gateway(s) resources.
+      - name: aiservicebackends.aigateway.envoyproxy.io
+        kind: AIServiceBackend
+        version: v1beta1
+        displayName: AI Service Backend
+        description: AIServiceBackend is a resource that represents a single backend for AIGatewayRoute.
+      - name: backends.gateway.envoyproxy.io
+        kind: Backend
+        version: v1alpha1
+        displayName: Backend
+        description: Backend allows the user to configure the endpoints of a backend and the behavior of the connection from Envoy Proxy to the backend.
+      - name: backendsecuritypolicies.aigateway.envoyproxy.io
+        kind: BackendSecurityPolicy
+        version: v1beta1
+        displayName: Backend Security Policy
+        description: BackendSecurityPolicy specifies configuration for authentication and authorization rules on the traffic exiting the gateway to the backend.
+      - name: backendtrafficpolicies.gateway.envoyproxy.io
+        kind: BackendTrafficPolicy
+        version: v1alpha1
+        displayName: Backend Traffic Policy
+        description: BackendTrafficPolicy allows the user to configure the behavior of the connection between the Envoy Proxy listener and the backend service.
+      - name: clienttrafficpolicies.gateway.envoyproxy.io
+        kind: ClientTrafficPolicy
+        version: v1alpha1
+        displayName: Client Traffic Policy
+        description: ClientTrafficPolicy allows the user to configure the behavior of the connection between the downstream client and Envoy Proxy listener.
+      - name: envoyextensionpolicies.gateway.envoyproxy.io
+        kind: EnvoyExtensionPolicy
+        version: v1alpha1
+        displayName: Envoy Extension Policy
+        description: EnvoyExtensionPolicy allows the user to configure various envoy extensibility options for the Gateway.
+      - name: envoypatchpolicies.gateway.envoyproxy.io
+        kind: EnvoyPatchPolicy
+        version: v1alpha1
+        displayName: Envoy Patch Policy
+        description: EnvoyPatchPolicy allows the user to modify the generated Envoy xDS resources by Envoy Gateway using this patch API
+      - name: envoyproxies.gateway.envoyproxy.io
+        kind: EnvoyProxy
+        version: v1alpha1
+        displayName: Envoy Proxy
+        description: EnvoyProxy is the schema for the envoyproxies API.
+      - name: gatewayconfigs.aigateway.envoyproxy.io
+        kind: GatewayConfig
+        version: v1beta1
+        displayName: Gateway Config
+        description: GatewayConfig provides configuration for the AI Gateway external processor container that is deployed alongside the Gateway.
+      - name: httproutefilters.gateway.envoyproxy.io
+        kind: HTTPRouteFilter
+        version: v1alpha1
+        displayName: HTTP Route Filter
+        description: HTTPRouteFilter is a custom Envoy Gateway HTTPRouteFilter which provides extended traffic processing options such as path regex rewrite, direct response and more.
+      - name: mcproutes.aigateway.envoyproxy.io
+        kind: MCPRoute
+        version: v1beta1
+        displayName: MCP Route
+        description: MCPRoute defines how to route MCP requests to the backend MCP servers.
+      - name: quotapolicies.aigateway.envoyproxy.io
+        kind: QuotaPolicy
+        version: v1alpha1
+        displayName: Quota Policy
+        description: QuotaPolicy specifies token quota configuration for inference services.
+      - name: securitypolicies.gateway.envoyproxy.io
+        kind: SecurityPolicy
+        version: v1alpha1
+        displayName: Security Policy
+        description: SecurityPolicy allows the user to configure various security settings for a Gateway.
+  install:
+    strategy: deployment
+    spec:
+      deployments:
+        - name: envoy-gateway
+          label:
+            app.kubernetes.io/name: envoy-gateway
+            app.kubernetes.io/part-of: envoy-operator
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                "app.kubernetes.io/name": "envoy-gateway"
+                "control-plane": "envoy-gateway"
+            template:
+              metadata:
+                annotations:
+                  prometheus.io/port: "19001"
+                  prometheus.io/scrape: "true"
+                  kubectl.kubernetes.io/default-container: envoy-gateway
+                labels:
+                  "app.kubernetes.io/name": "envoy-gateway"
+                  "control-plane": "envoy-gateway"
+                  app.kubernetes.io/part-of: envoy-operator
+                  app.kubernetes.io/version: 0.1.0
+              spec:
+                automountServiceAccountToken: true
+                securityContext:
+                  runAsNonRoot: true
+                  seccompProfile:
+                    type: RuntimeDefault
+                containers:
+                  - args:
+                      - server
+                      - --config-path=/config/envoy-gateway.yaml
+                    env:
+                      - name: ENVOY_GATEWAY_NAMESPACE
+                        valueFrom:
+                          fieldRef:
+                            apiVersion: v1
+                            fieldPath: metadata.namespace
+                      - name: ENVOY_GATEWAY_SERVICE_ACCOUNT
+                        valueFrom:
+                          fieldRef:
+                            apiVersion: v1
+                            fieldPath: spec.serviceAccountName
+                      - name: ENVOY_GATEWAY_FULLNAME
+                        value: envoy-gateway
+                      - name: KUBERNETES_CLUSTER_DOMAIN
+                        value: cluster.local
+                    image: docker.io/envoyproxy/gateway@sha256:192fc9bdadb6d2462e8cf7bd702ce3dd9648f3310c6038787448a1f509b7cd9f
+                    imagePullPolicy: IfNotPresent
+                    startupProbe:
+                      failureThreshold: 30
+                      httpGet:
+                        path: /healthz
+                        port: 8081
+                      periodSeconds: 1
+                      successThreshold: 1
+                      timeoutSeconds: 1
+                    livenessProbe:
+                      httpGet:
+                        path: /healthz
+                        port: 8081
+                      periodSeconds: 20
+                      successThreshold: 1
+                      timeoutSeconds: 1
+                    name: envoy-gateway
+                    ports:
+                      - containerPort: 18000
+                        name: grpc
+                      - containerPort: 18001
+                        name: ratelimit
+                      - containerPort: 18002
+                        name: wasm
+                      - containerPort: 19001
+                        name: metrics
+                    readinessProbe:
+                      httpGet:
+                        path: /readyz
+                        port: 8081
+                      periodSeconds: 10
+                      successThreshold: 1
+                      timeoutSeconds: 1
+                    resources:
+                      limits:
+                        memory: 1024Mi
+                        cpu: "1"
+                      requests:
+                        cpu: 100m
+                        memory: 256Mi
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      capabilities:
+                        drop:
+                          - ALL
+                      privileged: false
+                      readOnlyRootFilesystem: true
+                      runAsNonRoot: true
+                      seccompProfile:
+                        type: RuntimeDefault
+                    volumeMounts:
+                      - mountPath: /config
+                        name: envoy-gateway-config
+                        readOnly: true
+                      - mountPath: /certs
+                        name: certs
+                        readOnly: true
+                      - mountPath: /var/lib/eg/wasm
+                        name: wasm-cache
+                serviceAccountName: envoy-gateway
+                terminationGracePeriodSeconds: 10
+                volumes:
+                  - configMap:
+                      defaultMode: 420
+                      name: envoy-gateway-config
+                    name: envoy-gateway-config
+                  - name: certs
+                    secret:
+                      secretName: envoy-gateway
+                  - name: wasm-cache
+                    emptyDir: {}
+        - name: ai-gateway-controller
+          label:
+            app.kubernetes.io/name: ai-gateway-controller
+            app.kubernetes.io/part-of: envoy-operator
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                "app.kubernetes.io/name": "ai-gateway-controller"
+            template:
+              metadata:
+                labels:
+                  "app.kubernetes.io/name": "ai-gateway-controller"
+                  app.kubernetes.io/part-of: envoy-operator
+                  app.kubernetes.io/version: 0.1.0
+                annotations:
+                  kubectl.kubernetes.io/default-container: ai-gateway-controller
+              spec:
+                serviceAccountName: ai-gateway-controller
+                hostNetwork: false
+                securityContext:
+                  runAsNonRoot: true
+                  seccompProfile:
+                    type: RuntimeDefault
+                containers:
+                  - name: ai-gateway-controller
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      capabilities:
+                        drop:
+                          - ALL
+                      privileged: false
+                      runAsNonRoot: true
+                      seccompProfile:
+                        type: RuntimeDefault
+                    image: "docker.io/envoyproxy/ai-gateway-controller@sha256:4d663346354321a677c4e942017277f690d0d7715f8e3348a535db174679e4f8"
+                    imagePullPolicy: IfNotPresent
+                    ports:
+                      - containerPort: 9443
+                      - containerPort: 1063
+                      - containerPort: 8080
+                      - containerPort: 18002
+                    args:
+                      - -logLevel=info
+                      - -logFormat=text
+                      - --extProcImage=docker.io/envoyproxy/ai-gateway-extproc@sha256:4af909a6f64ee6b97968995fec88c4fd3c41d020c6bcb7ca07136fdfffaa598c
+                      - --extProcImagePullPolicy=IfNotPresent
+                      - --extProcLogLevel=info
+                      - --extProcLogFormat=text
+                      - --envoyGatewayNamespace=envoy-gateway-system
+                      - --endpointPrefixes=openai:,cohere:/cohere,anthropic:/anthropic,typesafe:/typesafe
+                      - --tlsCertDir=/certs
+                      - --tlsCertName=tls.crt
+                      - --tlsKeyName=tls.key
+                      - --webhookPort=9443
+                      - --enableLeaderElection=true
+                      - --rootPrefix=/
+                      - --cacheSyncTimeout=2m
+                      - --watchNamespaces=
+                      - --quotaRateLimitServiceAddr=envoy-ai-gateway-ratelimit.envoy-gateway-system
+                      - --quotaRateLimitTimeout=5
+                      - --quotaRateLimitFailureModeDeny=false
+                      - --mcpSessionEncryptionSeed=$(MCP_SESSION_ENCRYPTION_SEED)
+                      - --mcpSessionEncryptionIterations=100000
+                    startupProbe:
+                      grpc:
+                        port: 1063
+                      failureThreshold: 75
+                      periodSeconds: 2
+                    livenessProbe:
+                      grpc:
+                        port: 1063
+                      initialDelaySeconds: 5
+                      periodSeconds: 2
+                    env:
+                      - name: POD_NAMESPACE
+                        valueFrom:
+                          fieldRef:
+                            fieldPath: metadata.namespace
+                      - name: MCP_SESSION_ENCRYPTION_SEED
+                        valueFrom:
+                          secretKeyRef:
+                            name: ai-gateway-controller-mcp-session-encryption
+                            key: seed
+                    readinessProbe:
+                      grpc:
+                        port: 1063
+                      initialDelaySeconds: 5
+                      periodSeconds: 2
+                    resources:
+                      requests:
+                        cpu: 100m
+                        memory: 128Mi
+                      limits:
+                        cpu: "1"
+                        memory: 1Gi
+                    volumeMounts:
+                      - mountPath: /certs
+                        name: certs
+                        readOnly: true
+                volumes:
+                  - name: certs
+                    projected:
+                      sources:
+                        - secret:
+                            name: ai-gateway-controller-tls
+                            items:
+                              - key: tls.crt
+                                path: tls.crt
+                              - key: tls.key
+                                path: tls.key
+                        - configMap:
+                            name: ai-gateway-controller-service-ca
+                            items:
+                              - key: service-ca.crt
+                                path: ca.crt
+                  - name: bootstrap
+                    configMap:
+                      name: envoy-operator-bootstrap
+                      defaultMode: 365
+                  - name: tmp
+                    emptyDir: {}
+                initContainers:
+                  - args:
+                      - --disable-topology-injector
+                    command:
+                      - envoy-gateway
+                      - certgen
+                    env:
+                      - name: ENVOY_GATEWAY_NAMESPACE
+                        valueFrom:
+                          fieldRef:
+                            apiVersion: v1
+                            fieldPath: metadata.namespace
+                      - name: KUBERNETES_CLUSTER_DOMAIN
+                        value: cluster.local
+                    image: docker.io/envoyproxy/gateway@sha256:192fc9bdadb6d2462e8cf7bd702ce3dd9648f3310c6038787448a1f509b7cd9f
+                    imagePullPolicy: IfNotPresent
+                    name: envoy-gateway-certgen
+                    securityContext:
+                      "allowPrivilegeEscalation": false
+                      "capabilities":
+                        "drop":
+                          - "ALL"
+                      "privileged": false
+                      "readOnlyRootFilesystem": true
+                      "runAsNonRoot": true
+                      "seccompProfile":
+                        "type": "RuntimeDefault"
+                    resources:
+                      requests:
+                        cpu: 10m
+                        memory: 32Mi
+                      limits:
+                        cpu: 200m
+                        memory: 128Mi
+                  - name: ar-bootstrap
+                    image: registry.access.redhat.com/ubi9/python-312-minimal@sha256:0ee314bb4fe191ca657f4b03cd2da6e8efac1d054e0336087716c30898e394e1
+                    command:
+                      - python3
+                      - -I
+                      - /bootstrap/ar-bootstrap.py
+                    env:
+                      - name: POD_NAMESPACE
+                        valueFrom:
+                          fieldRef:
+                            fieldPath: metadata.namespace
+                      - name: EXPECTED_NAMESPACE
+                        value: envoy-gateway-system
+                      - name: CSV_NAME
+                        value: envoy-operator.v0.1.0
+                    volumeMounts:
+                      - name: bootstrap
+                        mountPath: /bootstrap
+                        readOnly: true
+                      - name: tmp
+                        mountPath: /tmp
+                    securityContext:
+                      "allowPrivilegeEscalation": false
+                      "capabilities":
+                        "drop":
+                          - "ALL"
+                      "privileged": false
+                      "readOnlyRootFilesystem": true
+                      "runAsNonRoot": true
+                      "seccompProfile":
+                        "type": "RuntimeDefault"
+                    resources:
+                      requests:
+                        cpu: 10m
+                        memory: 64Mi
+                      limits:
+                        cpu: 200m
+                        memory: 256Mi
+      clusterPermissions:
+        - serviceAccountName: envoy-gateway
+          rules:
+            - apiGroups:
+                - ""
+              resources:
+                - nodes
+                - namespaces
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - gateway.networking.k8s.io
+              resources:
+                - gatewayclasses
+              verbs:
+                - get
+                - list
+                - patch
+                - update
+                - watch
+            - apiGroups:
+                - gateway.networking.k8s.io
+              resources:
+                - gatewayclasses/status
+              verbs:
+                - update
+            - apiGroups:
+                - multicluster.x-k8s.io
+              resources:
+                - serviceimports
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - ""
+              resources:
+                - configmaps
+                - secrets
+                - services
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - apps
+              resources:
+                - deployments
+                - daemonsets
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - discovery.k8s.io
+              resources:
+                - endpointslices
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - gateway.envoyproxy.io
+              resources:
+                - envoyproxies
+                - envoypatchpolicies
+                - clienttrafficpolicies
+                - backendtrafficpolicies
+                - securitypolicies
+                - envoyextensionpolicies
+                - backends
+                - httproutefilters
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - gateway.envoyproxy.io
+              resources:
+                - envoyproxies/status
+                - envoypatchpolicies/status
+                - clienttrafficpolicies/status
+                - backendtrafficpolicies/status
+                - securitypolicies/status
+                - envoyextensionpolicies/status
+                - backends/status
+              verbs:
+                - update
+            - apiGroups:
+                - gateway.networking.k8s.io
+              resources:
+                - gateways
+                - listenersets
+                - grpcroutes
+                - httproutes
+                - referencegrants
+                - tcproutes
+                - tlsroutes
+                - udproutes
+                - backendtlspolicies
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - gateway.networking.k8s.io
+              resources:
+                - gateways/status
+                - listenersets/status
+                - grpcroutes/status
+                - httproutes/status
+                - tcproutes/status
+                - tlsroutes/status
+                - udproutes/status
+                - backendtlspolicies/status
+              verbs:
+                - update
+            - apiGroups:
+                - ""
+              resources:
+                - serviceaccounts
+                - services
+                - configmaps
+              verbs:
+                - create
+                - get
+                - list
+                - delete
+                - deletecollection
+                - patch
+                - watch
+            - apiGroups:
+                - apps
+              resources:
+                - deployments
+                - daemonsets
+              verbs:
+                - create
+                - get
+                - list
+                - delete
+                - deletecollection
+                - patch
+                - watch
+            - apiGroups:
+                - autoscaling
+              resources:
+                - horizontalpodautoscalers
+              verbs:
+                - create
+                - get
+                - list
+                - delete
+                - deletecollection
+                - patch
+                - watch
+            - apiGroups:
+                - policy
+              resources:
+                - poddisruptionbudgets
+              verbs:
+                - create
+                - get
+                - list
+                - delete
+                - deletecollection
+                - patch
+                - watch
+            - apiGroups:
+                - certificates.k8s.io
+              resources:
+                - clustertrustbundles
+              verbs:
+                - list
+                - get
+                - watch
+            - apiGroups:
+                - authentication.k8s.io
+              resources:
+                - tokenreviews
+              verbs:
+                - create
+            - apiGroups:
+                - "inference.networking.k8s.io"
+              resources:
+                - "inferencepools"
+              verbs:
+                - "get"
+                - "list"
+                - "watch"
+        - serviceAccountName: ai-gateway-controller
+          rules:
+            - apiGroups:
+                - ""
+              resources:
+                - services
+                - secrets
+                - pods
+              verbs:
+                - '*'
+            - apiGroups:
+                - "apps"
+              resources:
+                - deployments
+                - daemonsets
+              verbs:
+                - '*'
+            - apiGroups:
+                - inference.networking.k8s.io
+              resources:
+                - '*'
+              verbs:
+                - '*'
+            - apiGroups:
+                - gateway.networking.k8s.io
+              resources:
+                - '*'
+              verbs:
+                - '*'
+            - apiGroups:
+                - aigateway.envoyproxy.io
+              resources:
+                - '*'
+              verbs:
+                - '*'
+            - apiGroups:
+                - gateway.envoyproxy.io
+              resources:
+                - '*'
+              verbs:
+                - '*'
+            - apiGroups:
+                - coordination.k8s.io
+              resources:
+                - leases
+              verbs:
+                - get
+                - watch
+                - list
+                - create
+                - update
+            - apiGroups:
+                - apiextensions.k8s.io
+              resources:
+                - customresourcedefinitions
+              verbs:
+                - get
+                - list
+            - apiGroups:
+                - ""
+              resources:
+                - events
+              verbs:
+                - create
+                - patch
+            - apiGroups:
+                - admissionregistration.k8s.io
+              resources:
+                - mutatingwebhookconfigurations
+              verbs:
+                - get
+                - list
+                - watch
+            - apiGroups:
+                - admissionregistration.k8s.io
+              resources:
+                - mutatingwebhookconfigurations
+              resourceNames:
+                - 'envoy-ai-gateway-gateway-pod-mutator.envoy-gateway-system'
+              verbs:
+                - update
+                - patch
+            - apiGroups:
+                - admissionregistration.k8s.io
+              resources:
+                - mutatingwebhookconfigurations
+              verbs:
+                - create
+            - apiGroups:
+                - rbac.authorization.k8s.io
+              resources:
+                - clusterroles
+              verbs:
+                - get
+                - list
+      permissions:
+        - serviceAccountName: envoy-gateway
+          rules:
+            - apiGroups:
+                - ""
+              resources:
+                - serviceaccounts
+                - services
+                - configmaps
+              verbs:
+                - create
+                - get
+                - list
+                - delete
+                - deletecollection
+                - patch
+                - watch
+            - apiGroups:
+                - apps
+              resources:
+                - deployments
+                - daemonsets
+              verbs:
+                - create
+                - get
+                - list
+                - delete
+                - deletecollection
+                - patch
+                - watch
+            - apiGroups:
+                - autoscaling
+              resources:
+                - horizontalpodautoscalers
+              verbs:
+                - create
+                - get
+                - list
+                - delete
+                - deletecollection
+                - patch
+                - watch
+            - apiGroups:
+                - policy
+              resources:
+                - poddisruptionbudgets
+              verbs:
+                - create
+                - get
+                - list
+                - delete
+                - deletecollection
+                - patch
+                - watch
+            - apiGroups:
+                - certificates.k8s.io
+              resources:
+                - clustertrustbundles
+              verbs:
+                - list
+                - get
+                - watch
+            - apiGroups:
+                - ""
+              resources:
+                - configmaps
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - coordination.k8s.io
+              resources:
+                - leases
+              verbs:
+                - get
+                - list
+                - watch
+                - create
+                - update
+                - patch
+                - delete
+            - apiGroups:
+                - ""
+              resources:
+                - events
+              verbs:
+                - create
+                - patch
+        - serviceAccountName: ai-gateway-controller
+          rules:
+            - apiGroups:
+                - ""
+              resources:
+                - secrets
+              verbs:
+                - get
+                - create
+                - update
+  relatedImages:
+    - name: envoy-gateway
+      image: docker.io/envoyproxy/gateway@sha256:192fc9bdadb6d2462e8cf7bd702ce3dd9648f3310c6038787448a1f509b7cd9f
+    - name: envoy-proxy
+      image: docker.io/envoyproxy/envoy@sha256:9d84a586119a27b50437dbb01eccd4722832741539b1ed53c8e9d6da6067a6e0
+    - name: envoy-ratelimit
+      image: docker.io/envoyproxy/ratelimit@sha256:b95206e32b1a5f824fb06062fbb85bbdfb7f5de54135e92afe8462f22c979681
+    - name: ai-gateway-controller
+      image: docker.io/envoyproxy/ai-gateway-controller@sha256:4d663346354321a677c4e942017277f690d0d7715f8e3348a535db174679e4f8
+    - name: ai-gateway-extproc
+      image: docker.io/envoyproxy/ai-gateway-extproc@sha256:4af909a6f64ee6b97968995fec88c4fd3c41d020c6bcb7ca07136fdfffaa598c
+    - name: bootstrap
+      image: registry.access.redhat.com/ubi9/python-312-minimal@sha256:0ee314bb4fe191ca657f4b03cd2da6e8efac1d054e0336087716c30898e394e1

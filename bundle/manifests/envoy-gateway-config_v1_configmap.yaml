@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: envoy-gateway-config
+  labels:
+    app.kubernetes.io/name: envoy-gateway
+    app.kubernetes.io/part-of: envoy-operator
+data:
+  envoy-gateway.yaml: |-
+    apiVersion: gateway.envoyproxy.io/v1alpha1
+    kind: EnvoyGateway
+    extensionApis:
+      enableBackend: true
+      enableEnvoyPatchPolicy: true
+    extensionManager:
+      hooks:
+        xdsTranslator:
+          post:
+            - Translation
+            - Cluster
+            - Route
+          translation:
+            cluster:
+              includeAll: true
+            listener:
+              includeAll: true
+            route:
+              includeAll: true
+            secret:
+              includeAll: true
+      service:
+        fqdn:
+          hostname: ai-gateway-controller.envoy-gateway-system.svc.cluster.local
+          port: 1063
+    gateway:
+      controllerName: gateway.envoyproxy.io/gatewayclass-controller
+    logging:
+      level:
+        default: info
+    provider:
+      kubernetes:
+        deploy:
+          type: GatewayNamespace
+        rateLimitDeployment:
+          container:
+            image: docker.io/envoyproxy/ratelimit@sha256:b95206e32b1a5f824fb06062fbb85bbdfb7f5de54135e92afe8462f22c979681
+          patch:
+            type: StrategicMerge
+            value:
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - imagePullPolicy: IfNotPresent
+                        name: envoy-ratelimit
+        shutdownManager:
+          image: docker.io/envoyproxy/gateway@sha256:192fc9bdadb6d2462e8cf7bd702ce3dd9648f3310c6038787448a1f509b7cd9f
+      type: Kubernetes
+    proxyTopologyInjector:
+      disabled: true
