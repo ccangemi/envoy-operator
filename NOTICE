@@ -1,0 +1,14 @@
+envoy-operator
+Copyright The envoy-operator Authors
+
+This project packages software from other projects. It does not change their
+source code.
+
+- Envoy Gateway (https://github.com/envoyproxy/gateway)
+  Copyright Envoy Gateway Authors. Licensed under the Apache License 2.0.
+- The Agent Router, formerly Envoy AI Gateway
+  (https://github.com/theagentrouter/agent-router)
+  Copyright Envoy AI Gateway Authors. Licensed under the Apache License 2.0.
+
+This is a community project. It is not affiliated with, or endorsed by, the
+Envoy project or the Cloud Native Computing Foundation.

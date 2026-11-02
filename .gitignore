@@ -1,0 +1,11 @@
+# Local tools and temporary files
+/bin/
+/tmp/
+*.part
+*.swp
+.DS_Store
+
+# Local kubeconfig files: never commit cluster credentials
+kubeconfig*
+*.kubeconfig
+.kube/
