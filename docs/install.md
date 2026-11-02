@@ -48,8 +48,8 @@ spec:
   installPlanApproval: Manual   # or Automatic
 ```
 
-Until the operator is in the community catalog, use a test catalog. See
-[development.md](development.md#test-on-openshift).
+The operator is published only in the OpenShift community catalog
+(`community-operators`).
 
 Check the result:
 

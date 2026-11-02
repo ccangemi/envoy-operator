@@ -4,22 +4,24 @@
 #   KUBECONFIG=<file> hack/e2e/ocp.sh <command>
 #
 # Commands:
-#   catalog    deploy a test catalog in the operator namespace
+#   catalog    check that the OpenShift community catalog has the operator
 #   install    install the operator through OLM and wait until it is ready
 #   verify     check the operator and the OpenShift Gateway API
 #   test       run the functional test with the examples in samples/ocp
 #   uninstall  delete the examples and uninstall the operator
 #   all        catalog, install, verify and test
 #
-# The catalog command needs CATALOG_IMAGE: a catalog image that the cluster
-# can pull, for example the one that the CI pushes to ghcr.io. The bundle is
-# too large to be served inline by a catalog (the CRDs are bigger than the
-# 2 MiB gRPC message limit of OLM), so OLM must pull the bundle image too.
-#
-# To test the runtime without OLM, see hack/e2e/direct-install.sh.
+# The operator comes from the OpenShift community catalog (CatalogSource
+# community-operators in openshift-marketplace). Before the operator is
+# published there, test the runtime with hack/e2e/direct-install.sh, then run
+# the verify and test commands.
 #
 # The script never logs in. Log in first, with a kubeconfig file that is not
 # in this repository.
+
+# Set before lib.sh, which defaults to the local test catalog of kind.sh.
+export CATALOG_NAME=${CATALOG_NAME:-community-operators}
+export CATALOG_SOURCE_NAMESPACE=${CATALOG_SOURCE_NAMESPACE:-openshift-marketplace}
 
 # shellcheck source=hack/e2e/lib.sh
 source "$(dirname "$0")/lib.sh"
@@ -27,30 +29,22 @@ require_tools YQ
 
 SNAPSHOT_FILE=${SNAPSHOT_FILE:-$ROOT_DIR/build/gateway-api-snapshot.tsv}
 
+catalog_ready() {
+  [[ $(k get catalogsource "$CATALOG_NAME" -n "$CATALOG_SOURCE_NAMESPACE" \
+    -o jsonpath='{.status.connectionState.lastObservedState}') == READY ]]
+}
+package_in_catalog() {
+  [[ $(k get packagemanifest "$PACKAGE_NAME" -n "$CATALOG_SOURCE_NAMESPACE" \
+    -o jsonpath='{.status.catalogSource}') == "$CATALOG_NAME" ]]
+}
+
 cmd_catalog() {
-  if [[ -n ${CATALOG_IMAGE:-} ]]; then
-    k create namespace "$NS" --dry-run=client -o yaml | k apply -f - >/dev/null
-    log "creating CatalogSource $CATALOG_NAME with image $CATALOG_IMAGE"
-    k apply -f - >/dev/null <<EOF
-apiVersion: operators.coreos.com/v1alpha1
-kind: CatalogSource
-metadata:
-  name: $CATALOG_NAME
-  namespace: $NS
-spec:
-  sourceType: grpc
-  image: $CATALOG_IMAGE
-  displayName: envoy-operator test catalog
-  grpcPodConfig:
-    securityContextConfig: restricted
-EOF
-  else
-    fail "set CATALOG_IMAGE to a catalog image that the cluster can pull (see docs/development.md)"
-  fi
-  catalog_ready() {
-    [[ $(k get catalogsource "$CATALOG_NAME" -n "$NS" -o jsonpath='{.status.connectionState.lastObservedState}') == READY ]]
-  }
   wait_for "CatalogSource $CATALOG_NAME is READY" catalog_ready
+  expect "the catalog $CATALOG_NAME has the package $PACKAGE_NAME" package_in_catalog
+  if [[ $e2e_errors -eq 0 ]]; then
+    log "channels: $(k get packagemanifest "$PACKAGE_NAME" -n "$CATALOG_SOURCE_NAMESPACE" \
+      -o jsonpath='{range .status.channels[*]}{.name}={.currentCSV} {end}')"
+  fi
 }
 
 cmd_install() {
@@ -115,7 +109,7 @@ case ${1:-} in
   verify) cmd_verify ;;
   test) cmd_test ;;
   uninstall) cmd_uninstall ;;
-  all) cmd_catalog && cmd_install && cmd_verify && cmd_test ;;
+  all) cmd_catalog && [[ $e2e_errors -eq 0 ]] && cmd_install && cmd_verify && cmd_test ;;
   *) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac
 finish

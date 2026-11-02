@@ -7,7 +7,9 @@ SHELL := /usr/bin/env bash -o pipefail
 include versions.env
 
 CONTAINER_TOOL ?= $(shell command -v podman >/dev/null 2>&1 && echo podman || echo docker)
-IMAGE_REGISTRY ?= ghcr.io/ccangemi
+# Images for local tests only. The community catalog pipeline builds the
+# published bundle image itself.
+IMAGE_REGISTRY ?= localhost:5001
 IMAGE_TAG ?= v$(OPERATOR_VERSION)
 BUNDLE_IMAGE ?= $(IMAGE_REGISTRY)/envoy-operator-bundle:$(IMAGE_TAG)
 CATALOG_IMAGE ?= $(IMAGE_REGISTRY)/envoy-operator-catalog:$(IMAGE_TAG)
@@ -67,7 +69,7 @@ check: lint bundle-gate test-gate validate ## Run all offline checks, like the C
 ##@ Images and catalog
 
 .PHONY: bundle-image
-bundle-image: ## Build the bundle image (BUNDLE_IMAGE).
+bundle-image: ## Build a local bundle image (BUNDLE_IMAGE), for tests.
 	$(CONTAINER_TOOL) build -f bundle.Dockerfile -t $(BUNDLE_IMAGE) .
 
 .PHONY: catalog
@@ -75,13 +77,8 @@ catalog: tools ## Generate a test catalog in build/catalog for BUNDLE_IMAGE.
 	hack/build-catalog.sh build/catalog bundle=$(BUNDLE_IMAGE)
 
 .PHONY: catalog-image
-catalog-image: catalog ## Build the test catalog image (CATALOG_IMAGE).
+catalog-image: catalog ## Build a local test catalog image (CATALOG_IMAGE).
 	$(CONTAINER_TOOL) build -f catalog.Dockerfile -t $(CATALOG_IMAGE) .
-
-.PHONY: push
-push: ## Push BUNDLE_IMAGE and CATALOG_IMAGE.
-	$(CONTAINER_TOOL) push $(BUNDLE_IMAGE)
-	$(CONTAINER_TOOL) push $(CATALOG_IMAGE)
 
 .PHONY: community
 community: ## Prepare build/community/operators/envoy-operator for the community catalog.
@@ -94,8 +91,8 @@ e2e-kind: tools ## Run the end-to-end test on a kind cluster (needs kind and a c
 	hack/e2e/kind.sh
 
 .PHONY: e2e-ocp
-e2e-ocp: tools ## Run the end-to-end test on OpenShift (needs KUBECONFIG and CATALOG_IMAGE).
-	CATALOG_IMAGE=$(CATALOG_IMAGE) hack/e2e/ocp.sh all
+e2e-ocp: tools ## Install from the community catalog and test on OpenShift (needs KUBECONFIG).
+	hack/e2e/ocp.sh all
 
 .PHONY: e2e-ocp-uninstall
 e2e-ocp-uninstall: tools ## Uninstall the operator and the examples from OpenShift.
