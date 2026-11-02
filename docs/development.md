@@ -33,7 +33,7 @@ again. The CI fails when `bundle/` does not match the inputs.
 
 | Target | What it does |
 |---|---|
-| `make bundle-gate` | The safety checks: no Gateway API CRDs, no admission policies, allowed CRD groups, Envoy Gateway configuration, images by digest, no fixed user IDs, resources and probes, bundle size, and more. |
+| `make bundle-gate` | The bundle gate: no Gateway API CRDs, no admission policies, allowed CRD groups, Envoy Gateway configuration, images by digest, no fixed user IDs, resources and probes, bundle size, and more. |
 | `make test-gate` | Breaks one rule at a time in a copy of the bundle and checks that the gate fails with the right check. |
 | `make validate` | `operator-sdk bundle validate` with the `operatorframework` and `community` suites. |
 | `make check` | All of the above, plus lint. |
