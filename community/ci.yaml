@@ -8,6 +8,7 @@ updateGraph: replaces-mode
 # GitHub user names that can approve changes to this operator.
 reviewers:
   - amedeos
+  - ccangemi
 fbc:
   enabled: true
   catalog_mapping:
