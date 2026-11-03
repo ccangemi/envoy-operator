@@ -1,0 +1,14 @@
+envoy-gateway-operator
+Copyright The envoy-gateway-operator Authors
+
+This project packages software from other projects. It does not change their
+source code.
+
+- Envoy Gateway (https://github.com/envoyproxy/gateway)
+  Copyright Envoy Gateway Authors. Licensed under the Apache License 2.0.
+  The directory helm-charts/gateway-helm is the upstream Helm chart, unchanged.
+- Operator SDK helm-operator (https://github.com/operator-framework/operator-sdk)
+  Copyright The Operator-SDK Authors. Licensed under the Apache License 2.0.
+
+This is a community project. It is not affiliated with, or endorsed by, the
+Envoy project or the Cloud Native Computing Foundation.

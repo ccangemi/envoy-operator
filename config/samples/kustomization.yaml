@@ -1,0 +1,4 @@
+## Append samples of your project ##
+resources:
+- envoygateway_v1alpha1_envoygateway.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples

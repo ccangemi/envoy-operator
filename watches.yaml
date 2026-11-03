@@ -1,0 +1,8 @@
+# The custom resource that the operator watches, and the chart that it
+# installs for each resource. helm-charts/gateway-helm is the upstream chart,
+# unchanged.
+- group: envoygateway.ccangemi.github.io
+  version: v1alpha1
+  kind: EnvoyGateway
+  chart: helm-charts/gateway-helm
+# +kubebuilder:scaffold:watch

@@ -1,0 +1,5 @@
+apiVersion: envoygateway.ccangemi.github.io/v1alpha1
+kind: EnvoyGateway
+metadata:
+  name: envoy-gateway
+spec: {}
