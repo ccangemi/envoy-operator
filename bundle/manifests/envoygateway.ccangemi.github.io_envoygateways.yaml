@@ -44,6 +44,12 @@ spec:
             description: Values of the operator chart. The values of the upstream
               gateway-helm chart go under the key "gateway-helm". Some values are
               set or refused by the operator; see the operator documentation.
+            properties:
+              gateway-helm:
+                default: {}
+                description: Values of the upstream gateway-helm chart.
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
             type: object
             x-kubernetes-preserve-unknown-fields: true
           status:

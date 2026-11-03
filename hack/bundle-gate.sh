@@ -74,6 +74,10 @@ check "the CRD of $CR_KIND allows only the name $CR_NAME" \
   env R="self.metadata.name == '$CR_NAME'" "$YQ" ea -N -e \
   "[$CRDS | select(.spec.group == \"$CR_GROUP\") | .spec.versions[].schema.openAPIV3Schema.x-kubernetes-validations[] | select(.rule == strenv(R))] | length > 0" \
   "$MANIFESTS"/*.yaml
+check "the CRD of $CR_KIND never sends empty values to Helm (gateway-helm defaults to {})" \
+  env K="gateway-helm" "$YQ" ea -N -e \
+  "[$CRDS | select(.spec.group == \"$CR_GROUP\") | .spec.versions[].schema.openAPIV3Schema.properties.spec.properties[strenv(K)].default | select(tag == \"!!map\") | select(length == 0)] | length > 0" \
+  "$MANIFESTS"/*.yaml
 
 # --- Forbidden objects -------------------------------------------------------
 FORBIDDEN='select(.kind | test("^(Namespace|ValidatingAdmissionPolicy|ValidatingAdmissionPolicyBinding|MutatingWebhookConfiguration|ValidatingWebhookConfiguration|SecurityContextConstraints)$"))'
@@ -98,7 +102,7 @@ refuses() {
   grep -q 'validate.yaml' <<<"$out"
 }
 watches_ok() {
-  W=$CHART_DIR "$YQ" -e 'length == 1 and .[0].chart == "helm-charts/envoy-gateway" and .[0].dryRunOption == "server"' "$WATCHES_FILE" &&
+  "$YQ" -e '[(length == 1), (.[0].chart == "helm-charts/envoy-gateway"), (.[0].dryRunOption == "server")] | all' "$WATCHES_FILE" &&
     [[ $CHART_DIR == */helm-charts/envoy-gateway ]]
 }
 check "watches.yaml installs helm-charts/envoy-gateway with dryRunOption server" watches_ok
@@ -118,8 +122,8 @@ check "the chart refuses a namespaceOverride" refuses --set gateway-helm.namespa
 check "the chart refuses a provider.kubernetes.watch block" \
   refuses --set gateway-helm.config.envoyGateway.provider.kubernetes.watch.type=Namespaces
 versions_match() {
-  V=$OPERATOR_VERSION C=$CHART_VERSION N=$CHART_NAME "$YQ" -e '.version == strenv(V) and .appVersion == strenv(C)
-    and ([.dependencies[] | select(.name == strenv(N) and .version == strenv(C))] | length == 1)' "$CHART_DIR/Chart.yaml" &&
+  V=$OPERATOR_VERSION C=$CHART_VERSION N=$CHART_NAME "$YQ" -e '[(.version == strenv(V)), (.appVersion == strenv(C)),
+    ([.dependencies[] | select(.name == strenv(N)) | select(.version == strenv(C))] | length == 1)] | all' "$CHART_DIR/Chart.yaml" &&
     C=$CHART_VERSION "$YQ" -e '.version == strenv(C)' "$CHART_DIR/charts/$CHART_NAME/Chart.yaml"
 }
 check "the chart versions match versions.env (operator $OPERATOR_VERSION, $CHART_NAME $CHART_VERSION)" versions_match
@@ -144,8 +148,8 @@ operator_image_ok() {
   local image
   image=$("$YQ" -N '.spec.install.spec.deployments[0].spec.template.spec.containers[] | select(.name == "manager") | .image' "$CSV")
   [[ -n $image ]] &&
-    I=$image "$YQ" -e '.metadata.annotations.containerImage == strenv(I)
-      and ([.spec.relatedImages[] | select(.name == "operator" and .image == strenv(I))] | length == 1)' "$CSV" &&
+    I=$image "$YQ" -e '[(.metadata.annotations.containerImage == strenv(I)),
+      ([.spec.relatedImages[] | select(.name == "operator") | select(.image == strenv(I))] | length == 1)] | all' "$CSV" &&
     if [[ ${REQUIRE_PINNED_OPERATOR_IMAGE:-false} == true ]]; then [[ $image == *@sha256:* ]]; fi
 }
 check "the operator image is the containerImage and a related image" operator_image_ok
@@ -168,7 +172,7 @@ check "the operator watches only the namespaces that OLM gives it (WATCH_NAMESPA
 
 # --- Versions and metadata ---------------------------------------------------
 check "the CSV name and version match versions.env" \
-  env C="$CSV_NAME" V="$OPERATOR_VERSION" "$YQ" -e '.metadata.name == strenv(C) and .spec.version == strenv(V)' "$CSV"
+  env C="$CSV_NAME" V="$OPERATOR_VERSION" "$YQ" -e '[(.metadata.name == strenv(C)), (.spec.version == strenv(V))] | all' "$CSV"
 check "the CSV supports only the OwnNamespace install mode" \
   "$YQ" -e '[.spec.installModes[] | select(.supported) | .type] | join(",") == "OwnNamespace"' "$CSV"
 check "the suggested namespace is $OPERATOR_NAMESPACE" \

@@ -63,6 +63,16 @@ spec:
               type: object
               default: {}
               x-kubernetes-preserve-unknown-fields: true
+              properties:
+                gateway-helm:
+                  description: >-
+                    Values of the upstream gateway-helm chart.
+                  type: object
+                  # Never let the values be empty: with empty values, a Helm
+                  # upgrade keeps the values of the previous release instead
+                  # of going back to the chart defaults.
+                  default: {}
+                  x-kubernetes-preserve-unknown-fields: true
             status:
               description: >-
                 Status of the Helm release, written by the operator.

@@ -71,6 +71,8 @@ expect_fail "no Envoy Gateway CRDs" "the bundle has Envoy Gateway CRDs" sh -c 'r
 expect_fail "no CRD of the custom resource" "the bundle has the CRD of" rm "bundle/$CRD_FILE"
 expect_fail "custom resource name not enforced" "allows only the name" \
   yqi 'del(.spec.versions[].schema.openAPIV3Schema.x-kubernetes-validations)' "bundle/$CRD_FILE"
+expect_fail "empty values possible" "never sends empty values to Helm" \
+  yqi 'del(.spec.versions[].schema.openAPIV3Schema.properties.spec.properties)' "bundle/$CRD_FILE"
 # Forbidden objects
 expect_fail "Namespace object" "no Namespace, admission policy" add_namespace
 expect_fail "OLM webhook" "the CSV defines no OLM webhooks" \
