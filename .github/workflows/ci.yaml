@@ -1,0 +1,80 @@
+# Offline checks: lint, chart and bundle generation, safety gate, OLM
+# validation, operator image build, DCO.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install yamllint
+        run: pipx install yamllint
+      - name: Run shellcheck, Python syntax check and yamllint
+        run: make lint
+
+  bundle:
+    name: Chart and bundle
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install the pinned tools
+        run: make tools
+      - name: Check that the upstream chart and the CRDs are unchanged
+        run: make chart-check
+      - name: Check that the RBAC matches the chart
+        run: make rbac-check
+      - name: Regenerate the bundle and compare it with the committed files
+        run: make bundle-check
+      - name: Run the safety gate
+        run: make bundle-gate
+      - name: Test the safety gate
+        run: make test-gate
+      - name: Validate the bundle with operator-sdk
+        run: make validate
+      - name: Upload the bundle
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bundle
+          path: |
+            bundle/
+            bundle.Dockerfile
+          retention-days: 14
+
+  image:
+    name: Operator image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build the operator image for amd64 and arm64 (no push)
+        run: |
+          docker buildx create --name multiarch --driver docker-container --use
+          docker buildx build --platform linux/amd64,linux/arm64 -t envoy-gateway-operator:ci .
+
+  dco:
+    name: DCO
+    if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Check the Signed-off-by lines
+        run: hack/check-dco.sh "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}"

@@ -1,0 +1,86 @@
+# Release: runs when you push a tag v<OPERATOR_VERSION>, for example v0.1.0.
+# It runs all checks again, builds and pushes the operator image to the GitHub
+# container registry, pins its digest in the bundle, and creates a GitHub
+# release with an archive of operators/envoy-gateway-operator/<version>/ for
+# the community catalog pull request. The community catalog pipeline builds
+# the bundle image.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Check that the tagged commit is on main
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "ERROR: the tag ${GITHUB_REF_NAME} is not on main. Release only from main." >&2
+            exit 1
+          fi
+      - name: Check the tag and the image repository in versions.env
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          source versions.env
+          if [[ "${GITHUB_REF_NAME}" != "v${OPERATOR_VERSION}" ]]; then
+            echo "ERROR: tag ${GITHUB_REF_NAME} does not match OPERATOR_VERSION=${OPERATOR_VERSION} in versions.env" >&2
+            exit 1
+          fi
+          expected="ghcr.io/${OWNER,,}/envoy-gateway-operator"
+          if [[ "${OPERATOR_IMAGE_REPOSITORY}" != "${expected}" ]]; then
+            echo "ERROR: OPERATOR_IMAGE_REPOSITORY=${OPERATOR_IMAGE_REPOSITORY} in versions.env, expected ${expected}" >&2
+            exit 1
+          fi
+      - name: Install the pinned tools
+        run: make tools
+      - name: Install yamllint
+        run: pipx install yamllint
+      - name: Run all checks
+        run: |
+          make chart-check
+          make bundle-check
+          make check
+      - name: Build and push the operator image
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          source versions.env
+          echo "${GH_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+          docker buildx create --name multiarch --driver docker-container --use
+          docker buildx build --platform linux/amd64,linux/arm64 --push \
+            --metadata-file build-metadata.json \
+            -t "${OPERATOR_IMAGE_REPOSITORY}:v${OPERATOR_VERSION}" .
+          digest=$(jq -r '."containerimage.digest"' build-metadata.json)
+          [[ "${digest}" == sha256:* ]] || { echo "ERROR: no image digest" >&2; exit 1; }
+          echo "OPERATOR_IMAGE=${OPERATOR_IMAGE_REPOSITORY}:v${OPERATOR_VERSION}@${digest}" >>"${GITHUB_ENV}"
+      - name: Pin the operator image in the bundle
+        run: |
+          hack/generate-bundle.sh
+          REQUIRE_PINNED_OPERATOR_IMAGE=true hack/bundle-gate.sh
+      - name: Prepare the community catalog directory
+        run: |
+          source versions.env
+          hack/community-layout.sh build/community
+          tar -C build/community -czf "build/envoy-gateway-operator-${OPERATOR_VERSION}-community.tar.gz" operators
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          source versions.env
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "envoy-gateway-operator ${OPERATOR_VERSION}" \
+            --notes "Envoy Gateway ${CHART_VERSION}. OpenShift ${OPENSHIFT_VERSIONS}. Operator image: ${OPERATOR_IMAGE}" \
+            --prerelease="$([[ ${CHANNEL} == alpha ]] && echo true || echo false)" \
+            "build/envoy-gateway-operator-${OPERATOR_VERSION}-community.tar.gz"

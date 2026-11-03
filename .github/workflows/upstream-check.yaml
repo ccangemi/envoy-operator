@@ -1,0 +1,55 @@
+# Once a week, checks for a new stable release of Envoy Gateway. When
+# versions.env is behind, it opens an issue (only one per version).
+name: Upstream check
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    name: Check upstream releases
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Compare versions.env with the latest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          source versions.env
+          name="Envoy Gateway"
+          repo=envoyproxy/gateway
+          current=${CHART_VERSION}
+          newest=$(gh api "repos/${repo}/releases/latest" --jq .tag_name)
+          # newer <a> <b>: true when version a is newer than version b.
+          newer() { [[ "$1" != "$2" && "$(printf '%s\n%s\n' "${1#v}" "${2#v}" | sort -V | tail -1)" == "${1#v}" ]]; }
+          if ! newer "${newest}" "${current}"; then
+            echo "${name}: ${current} is up to date (latest release: ${newest})"
+            exit 0
+          fi
+          # One issue per upstream version, open or closed: a closed issue
+          # means that someone decided about this version.
+          title="Upstream: ${name} ${newest} is available"
+          if gh issue list --state all --search "in:title \"${title}\"" --json number --jq '.[].number' | grep -q .; then
+            echo "${name}: an issue for ${newest} already exists"
+            exit 0
+          fi
+          gh issue create --title "${title}" --body "$(printf '%s\n' \
+            "A new release of ${name} is available: https://github.com/${repo}/releases/tag/${newest}" \
+            "versions.env has ${current}." \
+            "" \
+            "To update the operator (docs/development.md):" \
+            "" \
+            "1. Create a feature branch." \
+            "2. Change CHART_VERSION, OPERATOR_VERSION and REPLACES in versions.env." \
+            "3. Run make update-upstream bundle, and review the diff." \
+            "4. Read the upstream release notes, in particular the Gateway API version that the release needs." \
+            "5. Run make check, then the end-to-end test on OpenShift 4.22." \
+            "6. Open a pull request.")"
+          echo "${name}: opened an issue for ${newest}"

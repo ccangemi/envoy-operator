@@ -1,0 +1,16 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+  # The helm-operator base image of the Dockerfile, pinned by digest. Keep
+  # HELM_OPERATOR_VERSION in hack/tools.sh at the same version.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
