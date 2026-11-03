@@ -8,7 +8,9 @@ source "$(dirname "${BASH_SOURCE[0]}")/../lib.sh"
 KUBECTL=${KUBECTL:-oc}
 NS=${NS:-$OPERATOR_NAMESPACE}
 CSV_NAME=$PACKAGE_NAME.v$OPERATOR_VERSION
-TEST_NS=${TEST_NS:-eg-test}
+# The namespace of the examples in samples/ocp/test, which name it.
+# shellcheck disable=SC2034 # used by hack/e2e/ocp.sh
+TEST_NS=eg-test
 # shellcheck disable=SC2034 # used by hack/e2e/ocp.sh
 GATEWAY_NAME=eg-test-gateway
 TIMEOUT=${TIMEOUT:-600}
@@ -52,6 +54,18 @@ finish() {
 }
 
 # --- State of the Gateway API CRDs ------------------------------------------
+# snapshot_file prints the file of the snapshot for the current cluster. The
+# name contains the cluster ID, so a run on another cluster never compares
+# with this one. SNAPSHOT_FILE overrides it.
+snapshot_file() {
+  if [[ -n ${SNAPSHOT_FILE:-} ]]; then
+    echo "$SNAPSHOT_FILE"
+    return
+  fi
+  local id
+  id=$(k get clusterversion version -o jsonpath='{.spec.clusterID}' 2>/dev/null) || true
+  echo "$ROOT_DIR/build/gateway-api-snapshot-${id:-unknown}.tsv"
+}
 # A snapshot of the Gateway API CRDs: name, uid, generation, bundle version.
 # The operator must never change them, so the snapshot after the test must
 # be the same as before.

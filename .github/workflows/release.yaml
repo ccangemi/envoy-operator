@@ -1,8 +1,9 @@
 # Release: runs when you push a tag v<OPERATOR_VERSION>, for example v0.1.0.
-# It runs all checks again, builds and pushes the operator image to the GitHub
-# container registry, pins its digest in the bundle, and creates a GitHub
-# release with an archive of operators/envoy-gateway-operator/<version>/ for
-# the community catalog pull request. The community catalog pipeline builds
+# It runs all checks again, checks the pinned bundle with a placeholder digest,
+# builds and pushes the operator image to the GitHub container registry (or
+# reuses it when an earlier run pushed it), pins its digest in the bundle, and
+# creates a GitHub release with an archive of operators/envoy-gateway-operator/<version>/
+# for the community catalog pull request. The community catalog pipeline builds
 # the bundle image.
 name: Release
 
@@ -50,21 +51,36 @@ jobs:
       - name: Run all checks
         run: |
           make chart-check
-          make bundle-check
           make check
+      - name: Check the pinned bundle before anything is published
+        run: |
+          # The same steps as after the push, with a placeholder digest: a
+          # problem stops the release before the image is public.
+          source versions.env
+          zeros=$(printf '0%.0s' $(seq 64))
+          OPERATOR_IMAGE="${OPERATOR_IMAGE_REPOSITORY}:v${OPERATOR_VERSION}@sha256:${zeros}" hack/generate-bundle.sh
+          REQUIRE_PINNED_OPERATOR_IMAGE=true hack/bundle-gate.sh
+          hack/community-layout.sh build/community-check
       - name: Build and push the operator image
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           source versions.env
+          image="${OPERATOR_IMAGE_REPOSITORY}:v${OPERATOR_VERSION}"
           echo "${GH_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
           docker buildx create --name multiarch --driver docker-container --use
-          docker buildx build --platform linux/amd64,linux/arm64 --push \
-            --metadata-file build-metadata.json \
-            -t "${OPERATOR_IMAGE_REPOSITORY}:v${OPERATOR_VERSION}" .
-          digest=$(jq -r '."containerimage.digest"' build-metadata.json)
+          if docker buildx imagetools inspect "${image}" >/dev/null 2>&1; then
+            # An earlier run of this release pushed it: reuse it, so that the
+            # digest of a published tag never changes.
+            echo "${image} exists already; it is reused, not rebuilt."
+            digest=$(docker buildx imagetools inspect "${image}" --format '{{json .Manifest}}' | jq -r .digest)
+          else
+            docker buildx build --platform linux/amd64,linux/arm64 --push \
+              --metadata-file build-metadata.json -t "${image}" .
+            digest=$(jq -r '."containerimage.digest"' build-metadata.json)
+          fi
           [[ "${digest}" == sha256:* ]] || { echo "ERROR: no image digest" >&2; exit 1; }
-          echo "OPERATOR_IMAGE=${OPERATOR_IMAGE_REPOSITORY}:v${OPERATOR_VERSION}@${digest}" >>"${GITHUB_ENV}"
+          echo "OPERATOR_IMAGE=${image}@${digest}" >>"${GITHUB_ENV}"
       - name: Pin the operator image in the bundle
         run: |
           hack/generate-bundle.sh

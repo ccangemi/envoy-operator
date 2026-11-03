@@ -13,6 +13,13 @@
 #   config/crd/upstream/                        the Envoy Gateway CRDs, one per file
 #   config/crd/kustomization.yaml               the list of CRDs
 #   config/rbac/role.yaml                       the operator permissions (hack/generate-rbac.sh)
+#
+# It prepares and checks everything in a temporary directory first, and changes
+# the repository only when all downloads and checks succeeded.
+#
+# The images to pin are listed below. When a new upstream version adds an
+# image, add it here: hack/bundle-gate.sh fails until every image of the
+# rendered chart is pinned and listed in related-images.yaml.
 
 # shellcheck source=hack/lib.sh
 source "$(dirname "$0")/lib.sh"
@@ -24,20 +31,12 @@ trap 'rm -rf "$work"' EXIT
 pull() {
   log "pulling $1 $2"
   mkdir -p "$work/$1"
-  "$HELM" pull "$CHART_OCI/$1" --version "$2" --untar --untardir "$work/$1" >/dev/null 2>&1 \
-    || fail "cannot pull $CHART_OCI/$1 $2"
+  run_quiet "cannot pull $CHART_OCI/$1 $2" \
+    "$HELM" pull "$CHART_OCI/$1" --version "$2" --untar --untardir "$work/$1"
 }
 pull "$CHART_NAME" "$CHART_VERSION"
 pull "$CRDS_CHART_NAME" "$CHART_VERSION"
-
-# --- The chart -----------------------------------------------------------------
-log "copying $CHART_NAME $CHART_VERSION to ${UPSTREAM_CHART_DIR#"$ROOT_DIR"/} (unchanged)"
-rm -rf "$UPSTREAM_CHART_DIR"
-mkdir -p "$(dirname "$UPSTREAM_CHART_DIR")"
-cp -a "$work/$CHART_NAME/$CHART_NAME" "$UPSTREAM_CHART_DIR"
-export OPERATOR_VERSION CHART_VERSION CHART_NAME
-"$YQ" -i '.version = strenv(OPERATOR_VERSION) | .appVersion = strenv(CHART_VERSION)
-  | (.dependencies[] | select(.name == strenv(CHART_NAME)) | .version) = strenv(CHART_VERSION)' "$CHART_DIR/Chart.yaml"
+upstream=$work/$CHART_NAME/$CHART_NAME
 
 # --- The CRDs ------------------------------------------------------------------
 # Only the Envoy Gateway CRDs: never the Gateway API CRDs, which belong to the
@@ -46,24 +45,51 @@ log "rendering the Envoy Gateway CRDs (without the Gateway API CRDs)"
 "$HELM" template crds "$work/$CRDS_CHART_NAME/$CRDS_CHART_NAME" \
   --set crds.gatewayAPI.enabled=false --set crds.envoyGateway.enabled=true \
   >"$work/crds.yaml"
-rm -rf "$ROOT_DIR/config/crd/upstream"
-mkdir -p "$ROOT_DIR/config/crd/upstream"
+mkdir -p "$work/crd-upstream"
 # One file per CRD, named <group>_<plural>.yaml like operator-sdk does. Helm
 # labels are removed: OLM owns these CRDs, not Helm.
-(cd "$ROOT_DIR/config/crd/upstream" && "$YQ" -s '.spec.group + "_" + .spec.names.plural + ".yaml"' \
+(cd "$work/crd-upstream" && "$YQ" -s '.spec.group + "_" + .spec.names.plural + ".yaml"' \
   'select(.kind == "CustomResourceDefinition")
    | del(.metadata.labels."helm.sh/chart", .metadata.labels."app.kubernetes.io/managed-by",
          .metadata.labels."app.kubernetes.io/instance", .metadata.annotations."helm.sh/resource-policy")
    | del(.metadata.labels | select(length == 0))
    | del(.metadata.annotations | select(length == 0))' \
   "$work/crds.yaml")
-for f in "$ROOT_DIR"/config/crd/upstream/*.yaml; do
+for f in "$work"/crd-upstream/*.yaml; do
   # One document per file, without separators, comments or empty documents.
   "$YQ" -N 'select(.kind == "CustomResourceDefinition") | ... comments = ""' "$f" >"$work/crd.yaml"
   mv "$work/crd.yaml" "$f"
   group=$("$YQ" '.spec.group' "$f")
   [[ $group =~ $ALLOWED_CRD_GROUPS ]] || fail "$(basename "$f"): CRD group $group is not allowed"
 done
+
+# --- Images --------------------------------------------------------------------
+# The operator chart passes the images to the upstream chart by digest, and
+# the bundle lists them in relatedImages, so that mirroring tools copy them.
+log "resolving image digests"
+EG_IMAGE=$(pin "$("$YQ" '.global.images.envoyGateway.image' "$upstream/values.yaml")")
+RATELIMIT_IMAGE=$(pin "$("$YQ" '.global.images.ratelimit.image' "$upstream/values.yaml")")
+# The default Envoy proxy image is compiled into Envoy Gateway, already pinned
+# by digest. The operator does not change it; the bundle only lists it.
+PROXY_IMAGE=$(curl -sSfL --retry 3 \
+  "https://raw.githubusercontent.com/envoyproxy/gateway/$CHART_VERSION/api/v1alpha1/shared_types.go" \
+  | sed -nE 's/^\s*DefaultEnvoyProxyImage\s*=\s*"([^"]+)".*/\1/p')
+[[ $PROXY_IMAGE == *@sha256:* ]] || fail "cannot find the default Envoy proxy image of Envoy Gateway $CHART_VERSION"
+export EG_IMAGE RATELIMIT_IMAGE PROXY_IMAGE
+
+# --- Write the repository ------------------------------------------------------
+log "writing ${UPSTREAM_CHART_DIR#"$ROOT_DIR"/}, the CRDs and the image pins"
+rm -rf "$UPSTREAM_CHART_DIR"
+mkdir -p "$(dirname "$UPSTREAM_CHART_DIR")"
+cp -a "$upstream" "$UPSTREAM_CHART_DIR"
+export OPERATOR_VERSION CHART_VERSION CHART_NAME
+"$YQ" -i '.version = strenv(OPERATOR_VERSION) | .appVersion = strenv(CHART_VERSION)
+  | (.dependencies[] | select(.name == strenv(CHART_NAME)) | .version) = strenv(CHART_VERSION)' "$CHART_DIR/Chart.yaml"
+"$YQ" -i '."gateway-helm".global.images.envoyGateway.image = strenv(EG_IMAGE)
+  | ."gateway-helm".global.images.ratelimit.image = strenv(RATELIMIT_IMAGE)' "$CHART_DIR/values.yaml"
+
+rm -rf "$ROOT_DIR/config/crd/upstream"
+cp -a "$work/crd-upstream" "$ROOT_DIR/config/crd/upstream"
 {
   echo "# Generated by hack/update-upstream.sh. Do not edit."
   echo "# The CRD of the custom resource, then the Envoy Gateway CRDs."
@@ -73,23 +99,6 @@ done
   done
 } >"$ROOT_DIR/config/crd/kustomization.yaml"
 
-# --- Images --------------------------------------------------------------------
-# The operator chart passes the images to the upstream chart by digest, and
-# the bundle lists them in relatedImages, so that mirroring tools copy them.
-log "resolving image digests"
-values=$UPSTREAM_CHART_DIR/values.yaml
-EG_IMAGE=$(pin "$("$YQ" '.global.images.envoyGateway.image' "$values")")
-RATELIMIT_IMAGE=$(pin "$("$YQ" '.global.images.ratelimit.image' "$values")")
-# The default Envoy proxy image is compiled into Envoy Gateway, already pinned
-# by digest. The operator does not change it; the bundle only lists it.
-PROXY_IMAGE=$(curl -sSfL --retry 3 \
-  "https://raw.githubusercontent.com/envoyproxy/gateway/$CHART_VERSION/api/v1alpha1/shared_types.go" \
-  | sed -nE 's/^\s*DefaultEnvoyProxyImage\s*=\s*"([^"]+)".*/\1/p')
-[[ $PROXY_IMAGE == *@sha256:* ]] || fail "cannot find the default Envoy proxy image of Envoy Gateway $CHART_VERSION"
-export EG_IMAGE RATELIMIT_IMAGE PROXY_IMAGE
-
-"$YQ" -i '."gateway-helm".global.images.envoyGateway.image = strenv(EG_IMAGE)
-  | ."gateway-helm".global.images.ratelimit.image = strenv(RATELIMIT_IMAGE)' "$CHART_DIR/values.yaml"
 cat >"$ROOT_DIR/config/manifests/related-images.yaml" <<YAML
 # Generated by hack/update-upstream.sh. Do not edit.
 # The operand images. hack/generate-bundle.sh adds them, and the operator

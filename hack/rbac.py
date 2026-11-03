@@ -1,6 +1,7 @@
 """Builds the ClusterRole of the operator from rendered Helm manifests.
 
 Usage: python3 -I hack/rbac.py <manifests.json> <operator-rules.json>
+       python3 -I hack/rbac.py --self-test
 
 <manifests.json> is a JSON array of the objects that the chart renders, for
 all the value sets in hack/generate-rbac.sh. <operator-rules.json> is a JSON
@@ -33,14 +34,30 @@ IRREGULAR = {
 
 
 def plural(kind):
+    """The resource name of a kind, with the English plural rules that
+    Kubernetes uses (the same as the gengo pluralizer)."""
     if kind in IRREGULAR:
         return IRREGULAR[kind]
     lower = kind.lower()
-    if lower.endswith("y"):
+    if lower.endswith("y") and len(lower) > 1 and lower[-2] not in "aeiou":
         return lower[:-1] + "ies"
-    if lower.endswith("s"):
+    if lower.endswith(("s", "x", "z", "ch", "sh")):
         return lower + "es"
     return lower + "s"
+
+
+def self_test():
+    cases = {
+        "ConfigMap": "configmaps", "Gateway": "gateways", "SecurityPolicy": "securitypolicies",
+        "Ingress": "ingresses", "Endpoints": "endpoints", "Issuer": "issuers",
+        "MutatingWebhookConfiguration": "mutatingwebhookconfigurations", "Proxy": "proxies",
+        "EnvoyProxy": "envoyproxies", "Key": "keys", "PodDisruptionBudget": "poddisruptionbudgets",
+    }
+    for kind, want in cases.items():
+        got = plural(kind)
+        if got != want:
+            raise SystemExit("ERROR: plural(%r) is %r, expected %r" % (kind, got, want))
+    print("rbac.py self test passed")
 
 
 def group_of(api_version):
@@ -59,6 +76,9 @@ def atoms(rule):
 
 
 def main():
+    if sys.argv[1:] == ["--self-test"]:
+        self_test()
+        return
     manifests = json.load(open(sys.argv[1]))
     base_rules = json.load(open(sys.argv[2]))
 

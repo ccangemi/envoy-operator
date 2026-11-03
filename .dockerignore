@@ -1,5 +1,14 @@
-# Only these files go into the operator image (see Dockerfile).
+# The build context of the three images of this repository:
+#   Dockerfile          the operator image: LICENSE, watches.yaml, helm-charts/
+#   bundle.Dockerfile   the bundle image: bundle/
+#   catalog.Dockerfile  the test catalog image: build/catalog/
+# Everything else stays out of the context.
 *
+!Dockerfile
+!bundle.Dockerfile
+!catalog.Dockerfile
 !LICENSE
 !watches.yaml
-!helm-charts/
+!helm-charts
+!bundle
+!build/catalog

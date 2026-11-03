@@ -24,7 +24,8 @@ The name and email must match the commit author.
 3. Write commit messages in the
    [Conventional Commits](https://www.conventionalcommits.org/) style, for
    example `feat(chart): refuse a namespaceOverride`.
-4. Run `make check` before you push. It runs the same checks as the CI.
+4. Run `make check` before you push. It runs the offline checks of the CI.
+   The CI also runs `make chart-check`, which needs network access.
 5. Open a pull request against `main`. Describe what the change does and how
    you tested it.
 

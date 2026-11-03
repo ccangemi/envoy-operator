@@ -41,27 +41,30 @@ build() {
 }
 
 # The operator image: only what the Dockerfile copies.
+# Each context has the files that the Dockerfile needs and the .dockerignore of
+# the repository, so the build also checks that .dockerignore keeps them.
 mkdir -p "$work/operator"
-cp -a "$ROOT_DIR/Dockerfile" "$ROOT_DIR/LICENSE" "$ROOT_DIR/watches.yaml" "$ROOT_DIR/helm-charts" "$work/operator/"
+cp -a "$ROOT_DIR/Dockerfile" "$ROOT_DIR/.dockerignore" "$ROOT_DIR/LICENSE" "$ROOT_DIR/watches.yaml" "$ROOT_DIR/helm-charts" \
+  "$work/operator/"
 operator_image=$(build "$PACKAGE_NAME" "$work/operator")
 log "operator image: $operator_image"
 
 # The bundle, generated in a copy of the repository for this operator image.
 mkdir -p "$work/repo"
 (cd "$ROOT_DIR" && tar --exclude=./bin --exclude=./build --exclude=./.git -cf - .) | tar -C "$work/repo" -xf -
-BIN_DIR=$BIN_DIR OPERATOR_IMAGE=$operator_image "$work/repo/hack/generate-bundle.sh" >/dev/null 2>&1 \
-  || fail "cannot generate the bundle"
+BIN_DIR=$BIN_DIR OPERATOR_IMAGE=$operator_image run_quiet "cannot generate the bundle" "$work/repo/hack/generate-bundle.sh"
 mkdir -p "$work/bundle"
-cp -a "$work/repo/bundle" "$work/bundle/"
+cp -a "$work/repo/bundle" "$ROOT_DIR/.dockerignore" "$work/bundle/"
 cp "$work/repo/bundle.Dockerfile" "$work/bundle/Dockerfile"
 bundle_image=$(build "$PACKAGE_NAME-bundle" "$work/bundle")
 log "bundle image: $bundle_image"
 
 # The catalog, with the bundle rendered from its directory.
 mkdir -p "$work/catalog/build"
-"$ROOT_DIR/hack/build-catalog.sh" "$work/catalog/build/catalog" "$work/repo/bundle=$bundle_image" >/dev/null 2>&1 \
-  || fail "cannot build the catalog"
+run_quiet "cannot build the catalog" \
+  "$ROOT_DIR/hack/build-catalog.sh" "$work/catalog/build/catalog" "$work/repo/bundle=$bundle_image"
 cp "$ROOT_DIR/catalog.Dockerfile" "$work/catalog/Dockerfile"
+cp "$ROOT_DIR/.dockerignore" "$work/catalog/"
 catalog_image=$(build "$PACKAGE_NAME-catalog" "$work/catalog")
 log "catalog image: $catalog_image"
 echo "$catalog_image"

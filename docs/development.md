@@ -53,8 +53,8 @@ same inputs always give the same bundle:
 | `make bundle-gate` | the safety rules of the bundle and of the operator chart ([hack/bundle-gate.sh](../hack/bundle-gate.sh)) |
 | `make test-gate` | every gate check fails on a bundle or chart that breaks its rule |
 | `make validate` | `operator-sdk bundle validate`, operatorframework and community suites |
-| `make chart-check` | the upstream chart and the CRDs are unchanged (needs network access) |
-| `make check` | lint, rbac-check, bundle-gate, test-gate and validate |
+| `make chart-check` | the upstream chart, the image pins, the CRDs and the RBAC are what `make update-upstream` writes (needs network access) |
+| `make check` | lint, rbac-check, bundle-check, bundle-gate, test-gate and validate |
 
 ## Run the operator on your machine
 
@@ -111,11 +111,14 @@ the operator image must exist before the community pull request.
 1. Merge the version change (see above) into `main`.
 2. Push the tag `v<OPERATOR_VERSION>`, for example `v0.1.0`.
 3. The release workflow ([.github/workflows/release.yaml](../.github/workflows/release.yaml)):
-   * runs all checks;
+   * runs all checks, and checks the pinned bundle with a placeholder digest,
+     so that a problem stops the release before the image is public;
    * builds the operator image for amd64 and arm64 and pushes it to
      `ghcr.io/<owner>/envoy-gateway-operator:v<OPERATOR_VERSION>`;
    * regenerates the bundle with the image pinned by digest, and runs the
-     gate with `REQUIRE_PINNED_OPERATOR_IMAGE=true`;
+     gate with `REQUIRE_PINNED_OPERATOR_IMAGE=true`. When you run the job
+     again, it reuses the image that an earlier run pushed, so the digest of
+     a published tag never changes;
    * creates a GitHub release with the directory for the community catalog.
 4. Make the image package public in the GitHub settings (only the first
    time).

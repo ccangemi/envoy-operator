@@ -79,10 +79,11 @@ validate: tools ## Validate bundle/ with operator-sdk (operatorframework and com
 lint: ## Run shellcheck, a Python syntax check and yamllint (they must be installed).
 	shellcheck -x hack/*.sh hack/e2e/*.sh
 	python3 -I -m py_compile hack/rbac.py
+	python3 -I hack/rbac.py --self-test
 	yamllint -c .yamllint.yaml .
 
 .PHONY: check
-check: lint rbac-check bundle-gate test-gate validate ## Run all offline checks, like the CI.
+check: lint rbac-check bundle-check bundle-gate test-gate validate ## Run all offline checks of the CI (chart-check needs network access: run it apart).
 
 ##@ Catalog and community
 

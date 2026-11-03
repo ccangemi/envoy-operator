@@ -42,16 +42,37 @@ YQ=${YQ:-$BIN_DIR/yq}
 KUSTOMIZE=${KUSTOMIZE:-$BIN_DIR/kustomize}
 OPERATOR_SDK=${OPERATOR_SDK:-$BIN_DIR/operator-sdk}
 OPM=${OPM:-$BIN_DIR/opm}
-HELM_OPERATOR=${HELM_OPERATOR:-$BIN_DIR/helm-operator}
 
-# chart_images prints the images that the values of the operator chart set,
-# one per line.
-chart_images() {
-  "$YQ" -N '."gateway-helm".global.images | (.envoyGateway.image, .ratelimit.image)' "$CHART_DIR/values.yaml"
+# Extra arguments for offline renders of the chart (helm template).
+# shellcheck disable=SC2034
+RENDER_ARGS=()
+
+# rendered_images <file>: prints every image reference of rendered manifests,
+# one per line: the images of the pods, the --extProcImage arguments, and the
+# images in the configuration files that config maps carry (the Envoy Gateway
+# configuration). hack/bundle-gate.sh checks that all of them are pinned.
+rendered_images() {
+  local file=$1 data
+  "$YQ" ea -N '.. | select(tag == "!!map") | select(has("image")) | .image | select(tag == "!!str")' "$file"
+  "$YQ" ea -N '.. | select(tag == "!!str") | select(test("^--extProcImage=")) | sub("^--extProcImage=", "")' "$file"
+  while IFS= read -r -d '' data; do
+    "$YQ" -N '.. | select(tag == "!!map") | select(has("image")) | .image | select(tag == "!!str")' <<<"$data" 2>/dev/null || true
+  done < <("$YQ" ea -0 'select(.kind == "ConfigMap") | .data // {} | .[]' "$file")
 }
 
 log() { printf '==> %s\n' "$*" >&2; }
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+
+# run_quiet <message> <command...>: runs the command without output. When it
+# fails, prints its output and stops with the message.
+run_quiet() {
+  local message=$1 out
+  shift
+  if ! out=$("$@" 2>&1); then
+    printf '%s\n' "$out" >&2
+    fail "$message"
+  fi
+}
 
 require_tools() {
   local t

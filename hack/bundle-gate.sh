@@ -74,10 +74,18 @@ check "the CRD of $CR_KIND allows only the name $CR_NAME" \
   env R="self.metadata.name == '$CR_NAME'" "$YQ" ea -N -e \
   "[$CRDS | select(.spec.group == \"$CR_GROUP\") | .spec.versions[].schema.openAPIV3Schema.x-kubernetes-validations[] | select(.rule == strenv(R))] | length > 0" \
   "$MANIFESTS"/*.yaml
-check "the CRD of $CR_KIND never sends empty values to Helm (gateway-helm defaults to {})" \
-  env K="gateway-helm" "$YQ" ea -N -e \
-  "[$CRDS | select(.spec.group == \"$CR_GROUP\") | .spec.versions[].schema.openAPIV3Schema.properties.spec.properties[strenv(K)].default | select(tag == \"!!map\") | select(length == 0)] | length > 0" \
-  "$MANIFESTS"/*.yaml
+# Both defaults are needed: spec defaults to {} when the resource has no
+# spec, and spec.gateway-helm defaults to {} inside it.
+empty_defaults() {
+  local schemas
+  schemas=$("$YQ" ea -N -o json -I0 "[$CRDS | select(.spec.group == \"$CR_GROUP\") | .spec.versions[].schema.openAPIV3Schema.properties.spec]" \
+    "$MANIFESTS"/*.yaml) || return 1
+  K="gateway-helm" "$YQ" -p json -e '[(length > 0), (map([
+      ((.default // "x") | tag == "!!map"), ((.default // "x") | length == 0),
+      ((.properties[strenv(K)].default // "x") | tag == "!!map"), ((.properties[strenv(K)].default // "x") | length == 0)
+    ] | all) | all)] | all' <<<"$schemas"
+}
+check "the CRD of $CR_KIND never sends empty values to Helm (spec and spec.gateway-helm default to {})" empty_defaults
 
 # --- Forbidden objects -------------------------------------------------------
 FORBIDDEN='select(.kind | test("^(Namespace|ValidatingAdmissionPolicy|ValidatingAdmissionPolicyBinding|MutatingWebhookConfiguration|ValidatingWebhookConfiguration|SecurityContextConstraints)$"))'
@@ -94,7 +102,7 @@ check "the operator has no permission on security context constraints" \
 
 # --- Operator chart ----------------------------------------------------------
 # render [helm arguments...]: renders the operator chart with the CRDs.
-render() { "$HELM" template "$CR_NAME" "$CHART_DIR" --namespace "$OPERATOR_NAMESPACE" --include-crds "$@" 2>&1; }
+render() { "$HELM" template "$CR_NAME" "$CHART_DIR" --namespace "$OPERATOR_NAMESPACE" --include-crds "${RENDER_ARGS[@]}" "$@" 2>&1; }
 # refuses <helm arguments...>: true when templates/validate.yaml stops the render.
 refuses() {
   local out
@@ -127,16 +135,16 @@ versions_match() {
     C=$CHART_VERSION "$YQ" -e '.version == strenv(C)' "$CHART_DIR/charts/$CHART_NAME/Chart.yaml"
 }
 check "the chart versions match versions.env (operator $OPERATOR_VERSION, $CHART_NAME $CHART_VERSION)" versions_match
-chart_images_related() {
+rendered_images_related() {
   local i images
-  images=$(chart_images) || return 1
+  images=$(rendered_images "$rendered" | sort -u) || return 1
   [[ -n $images ]] || return 1
   for i in $images; do
     [[ $i == *@sha256:* ]] || { echo "not pinned: $i"; return 1; }
     I=$i "$YQ" -e '.[] | select(.image == strenv(I))' "$RELATED_IMAGES_FILE" || { echo "not in related-images.yaml: $i"; return 1; }
   done
 }
-check "the images of the chart are pinned by digest and listed in related-images.yaml" chart_images_related
+check "every image of the rendered chart is pinned by digest and listed in related-images.yaml" rendered_images_related
 
 # --- Images ------------------------------------------------------------------
 related_match() {

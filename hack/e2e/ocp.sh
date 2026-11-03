@@ -17,6 +17,7 @@
 #                  in CATALOG_NAMESPACE (default openshift-marketplace).
 #   CR_FILE        the EnvoyGateway resource (default samples/ocp/envoygateway.yaml)
 #   STABILITY_SECONDS  how long verify watches the release revision (default 200)
+#   SNAPSHOT_FILE  the snapshot of the Gateway API CRDs (default: build/, one per cluster)
 #
 # The script never logs in. Log in first, with a kubeconfig file that is not
 # in this repository.
@@ -26,13 +27,14 @@ source "$(dirname "$0")/lib.sh"
 require_tools YQ
 
 export CR_FILE=${CR_FILE:-$ROOT_DIR/samples/ocp/envoygateway.yaml}
-SNAPSHOT_FILE=${SNAPSHOT_FILE:-$ROOT_DIR/build/gateway-api-snapshot.tsv}
 
 cmd_install() {
-  mkdir -p "$(dirname "$SNAPSHOT_FILE")"
-  if [[ ! -s $SNAPSHOT_FILE ]]; then
-    gateway_api_snapshot >"$SNAPSHOT_FILE"
-    log "saved a snapshot of the Gateway API CRDs in ${SNAPSHOT_FILE#"$ROOT_DIR"/}"
+  local snapshot
+  snapshot=$(snapshot_file)
+  mkdir -p "$(dirname "$snapshot")"
+  if [[ ! -s $snapshot ]]; then
+    gateway_api_snapshot >"$snapshot"
+    log "saved a snapshot of the Gateway API CRDs in ${snapshot#"$ROOT_DIR"/}"
   fi
   install_operator
 }
@@ -45,6 +47,8 @@ ingress_healthy() {
 secret_exists() { k get secret "$1" -n "$NS"; }
 
 cmd_verify() {
+  local snapshot
+  snapshot=$(snapshot_file)
   log "checking the release"
   expect "$CR_KIND $CR_NAME is Deployed" cr_deployed
   expect "deployment envoy-gateway is available" deployment_available envoy-gateway
@@ -55,9 +59,9 @@ cmd_verify() {
   k get pods -n "$NS" -o custom-columns='NAME:.metadata.name,STATUS:.status.phase,RESTARTS:.status.containerStatuses[*].restartCount,SCC:.metadata.annotations.openshift\.io/scc' || true
 
   log "checking the OpenShift Gateway API"
-  if [[ -s $SNAPSHOT_FILE ]]; then
+  if [[ -s $snapshot ]]; then
     expect "the Gateway API CRDs did not change (name, uid, generation, bundle version)" \
-      diff "$SNAPSHOT_FILE" <(gateway_api_snapshot)
+      diff "$snapshot" <(gateway_api_snapshot)
   else
     fail_check "no snapshot of the Gateway API CRDs; run the install command first"
   fi
@@ -92,6 +96,8 @@ http_request() {
 http_ok() { http_request | grep -q '^HTTP 200'; }
 
 cmd_test() {
+  local snapshot
+  snapshot=$(snapshot_file)
   log "running the functional test in namespace $TEST_NS"
   local f
   for f in "$ROOT_DIR"/samples/ocp/test/*.yaml; do
@@ -101,12 +107,14 @@ cmd_test() {
   wait_for "Gateway $GATEWAY_NAME is programmed" gateway_programmed || true
   wait_for "proxy deployment $GATEWAY_NAME is available" deployment_available "$GATEWAY_NAME" "$TEST_NS" || true
   wait_for "a request through the Gateway returns HTTP 200" http_ok || true
-  if [[ -s $SNAPSHOT_FILE ]]; then
-    expect "the Gateway API CRDs did not change after the test" diff "$SNAPSHOT_FILE" <(gateway_api_snapshot)
+  if [[ -s $snapshot ]]; then
+    expect "the Gateway API CRDs did not change after the test" diff "$snapshot" <(gateway_api_snapshot)
   fi
 }
 
 cmd_uninstall() {
+  local snapshot
+  snapshot=$(snapshot_file)
   log "deleting the examples"
   local f
   for f in $(find "$ROOT_DIR/samples/ocp/test" -name '*.yaml' | sort -r); do
@@ -120,8 +128,10 @@ cmd_uninstall() {
   k delete subscription "$PACKAGE_NAME" -n "$NS" --ignore-not-found >/dev/null
   k delete csv "$CSV_NAME" -n "$NS" --ignore-not-found >/dev/null
   k delete catalogsource "$PACKAGE_NAME-test" -n "$NS" --ignore-not-found >/dev/null
-  if [[ -s $SNAPSHOT_FILE ]]; then
-    expect "the Gateway API CRDs did not change after uninstall" diff "$SNAPSHOT_FILE" <(gateway_api_snapshot)
+  if [[ -s $snapshot ]]; then
+    expect "the Gateway API CRDs did not change after uninstall" diff "$snapshot" <(gateway_api_snapshot)
+    # The next installation takes a new snapshot.
+    rm -f "$snapshot"
   fi
   log "left on the cluster on purpose: the CRDs (OLM never deletes CRDs) and the namespace $NS"
 }
@@ -133,6 +143,6 @@ case ${1:-} in
   test) cmd_test ;;
   uninstall) cmd_uninstall ;;
   all) cmd_install && cmd_cr && cmd_verify && cmd_test ;;
-  *) sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  *) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac
 finish
