@@ -13,6 +13,8 @@ CONTAINER_TOOL ?= $(shell command -v podman >/dev/null 2>&1 && echo podman || ec
 IMAGE_TAG ?= v$(OPERATOR_VERSION)
 IMG ?= $(OPERATOR_IMAGE_REPOSITORY):$(IMAGE_TAG)
 BUNDLE_IMG ?= $(OPERATOR_IMAGE_REPOSITORY)-bundle:$(IMAGE_TAG)
+CATALOG_IMG ?= $(OPERATOR_IMAGE_REPOSITORY)-catalog:$(IMAGE_TAG)
+PACKAGE := envoy-gateway-operator
 
 BIN := $(CURDIR)/bin
 OPERATOR_SDK := $(BIN)/operator-sdk
@@ -59,11 +61,56 @@ bundle-check: bundle ## Regenerate bundle/ and fail if it differs from the commi
 	  exit 1; \
 	fi
 
+.PHONY: bundle-gate
+bundle-gate: tools ## Run the offline safety checks on bundle/ and on the operator chart.
+	hack/bundle-gate.sh
+
+.PHONY: test-gate
+test-gate: tools ## Test that every bundle-gate check detects a broken bundle or chart.
+	hack/test-bundle-gate.sh
+
 .PHONY: validate
 validate: tools ## Validate bundle/ with operator-sdk (operatorframework and community suites).
 	$(OPERATOR_SDK) bundle validate ./bundle --select-optional suite=operatorframework
 	$(OPERATOR_SDK) bundle validate ./bundle --select-optional name=community \
 	  --optional-values=index-path=bundle.Dockerfile
+
+.PHONY: lint
+lint: ## Run shellcheck, a Python syntax check and yamllint (they must be installed).
+	shellcheck -x hack/*.sh hack/e2e/*.sh
+	python3 -I -m py_compile hack/rbac.py
+	yamllint -c .yamllint.yaml .
+
+.PHONY: check
+check: lint rbac-check bundle-gate test-gate validate ## Run all offline checks, like the CI.
+
+##@ Catalog and community
+
+.PHONY: catalog
+catalog: tools ## Generate a test catalog in build/catalog for BUNDLE_IMG.
+	hack/build-catalog.sh build/catalog bundle=$(BUNDLE_IMG)
+
+.PHONY: catalog-image
+catalog-image: catalog ## Build a local test catalog image (CATALOG_IMG).
+	$(CONTAINER_TOOL) build -f catalog.Dockerfile -t $(CATALOG_IMG) .
+
+.PHONY: community
+community: ## Prepare build/community/operators/$(PACKAGE) for the community catalog.
+	hack/community-layout.sh
+
+##@ End-to-end tests (OpenShift)
+
+.PHONY: build-on-cluster
+build-on-cluster: tools ## Build the operator, bundle and catalog images in the cluster (needs KUBECONFIG).
+	hack/e2e/build-on-cluster.sh
+
+.PHONY: e2e-ocp
+e2e-ocp: tools ## Install with OLM and test on OpenShift; set CATALOG_IMAGE for a test catalog (needs KUBECONFIG).
+	hack/e2e/ocp.sh all
+
+.PHONY: e2e-ocp-uninstall
+e2e-ocp-uninstall: tools ## Delete the examples and the resource, and uninstall the operator (needs KUBECONFIG).
+	hack/e2e/ocp.sh uninstall
 
 ##@ Development
 

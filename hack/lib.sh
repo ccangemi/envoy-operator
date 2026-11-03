@@ -14,7 +14,7 @@ source "$ROOT_DIR/versions.env"
 
 # The operator chart, and the upstream chart inside it.
 # shellcheck disable=SC2034
-CHART_DIR=$ROOT_DIR/helm-charts/envoy-gateway
+CHART_DIR=${CHART_DIR:-$ROOT_DIR/helm-charts/envoy-gateway}
 # shellcheck disable=SC2034
 UPSTREAM_CHART_DIR=$CHART_DIR/charts/$CHART_NAME
 # shellcheck disable=SC2034
@@ -43,6 +43,12 @@ KUSTOMIZE=${KUSTOMIZE:-$BIN_DIR/kustomize}
 OPERATOR_SDK=${OPERATOR_SDK:-$BIN_DIR/operator-sdk}
 OPM=${OPM:-$BIN_DIR/opm}
 HELM_OPERATOR=${HELM_OPERATOR:-$BIN_DIR/helm-operator}
+
+# chart_images prints the images that the values of the operator chart set,
+# one per line.
+chart_images() {
+  "$YQ" -N '."gateway-helm".global.images | (.envoyGateway.image, .ratelimit.image)' "$CHART_DIR/values.yaml"
+}
 
 log() { printf '==> %s\n' "$*" >&2; }
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }

@@ -1,0 +1,45 @@
+# An EnvoyGateway for The Agent Router (formerly Envoy AI Gateway), in Gateway
+# Namespace Mode. The extension settings come from the upstream file
+# manifests/envoy-gateway-values.yaml of the Agent Router.
+#
+# The extension manager points to the Agent Router controller, which the Agent
+# Router operator installs in envoy-ai-gateway-system. Until that controller
+# answers, Envoy Gateway cannot program any Gateway, so install the Agent
+# Router operator right after this resource.
+apiVersion: envoygateway.ccangemi.github.io/v1alpha1
+kind: EnvoyGateway
+metadata:
+  name: envoy-gateway
+  namespace: envoy-gateway-system
+spec:
+  gateway-helm:
+    config:
+      envoyGateway:
+        provider:
+          type: Kubernetes
+          kubernetes:
+            deploy:
+              type: GatewayNamespace
+        extensionApis:
+          enableEnvoyPatchPolicy: true
+          enableBackend: true
+        extensionManager:
+          hooks:
+            xdsTranslator:
+              translation:
+                listener:
+                  includeAll: true
+                route:
+                  includeAll: true
+                cluster:
+                  includeAll: true
+                secret:
+                  includeAll: true
+              post:
+                - Translation
+                - Cluster
+                - Route
+          service:
+            fqdn:
+              hostname: ai-gateway-controller.envoy-ai-gateway-system.svc.cluster.local
+              port: 1063

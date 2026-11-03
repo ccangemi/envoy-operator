@@ -1,7 +1,7 @@
 apiVersion: v2
 name: envoy-gateway
 description: >-
-  The chart of envoy-gateway-operator. It installs the upstream Envoy Gateway chart (charts/gateway-helm, unchanged) with the values that OpenShift needs.
+  The chart of envoy-gateway-operator: the upstream Envoy Gateway chart (charts/gateway-helm, unchanged) with the values for OpenShift.
 type: application
 # The operator version (versions.env). hack/update-upstream.sh keeps it, the
 # appVersion and the dependency version in step with versions.env.

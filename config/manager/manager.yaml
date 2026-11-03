@@ -44,53 +44,49 @@ spec:
                     operator: In
                     values:
                       - linux
+      # The "restricted" Pod Security Standard: OpenShift runs the operator
+      # with the restricted-v2 SCC.
       securityContext:
-        # Projects are configured by default to adhere to the "restricted" Pod Security Standards.
-        # This ensures that deployments meet the highest security requirements for Kubernetes.
-        # For more details, see: https://kubernetes.io/docs/concepts/security/pod-security-standards/#restricted
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
       containers:
-      - args:
-          - --leader-elect
-          - --leader-election-id=envoy-gateway-operator
-          - --health-probe-bind-address=:8081
-        image: controller:latest
-        name: manager
-        env:
-          # The operator reconciles only the resources in the namespaces that
-          # OLM gives it: its own namespace (OwnNamespace install mode).
-          - name: WATCH_NAMESPACE
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.annotations['olm.targetNamespaces']
-        ports: []
-        securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-            - "ALL"
-        livenessProbe:
-          httpGet:
-            path: /healthz
-            port: 8081
-          initialDelaySeconds: 15
-          periodSeconds: 20
-        readinessProbe:
-          httpGet:
-            path: /readyz
-            port: 8081
-          initialDelaySeconds: 5
-          periodSeconds: 10
-        resources:
-          limits:
-            cpu: 500m
-            memory: 512Mi
-          requests:
-            cpu: 10m
-            memory: 128Mi
-        volumeMounts: []
-      volumes: []
+        - name: manager
+          image: controller:latest
+          args:
+            - --leader-elect
+            - --leader-election-id=envoy-gateway-operator
+            - --health-probe-bind-address=:8081
+          env:
+            # The operator reconciles only the resources in the namespaces
+            # that OLM gives it: its own namespace (OwnNamespace install mode).
+            - name: WATCH_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.annotations['olm.targetNamespaces']
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 10m
+              memory: 128Mi
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10
