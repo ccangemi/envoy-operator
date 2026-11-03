@@ -40,7 +40,7 @@ spec:
     url: https://github.com/ccangemi/envoy-operator
   maintainers:
     - name: Amedeo Salvati
-      email: amedeo@linux.com
+      email: asalvati@redhat.com
   maturity: alpha
   minKubeVersion: 1.35.0
   keywords:

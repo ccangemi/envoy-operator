@@ -597,7 +597,7 @@ spec:
     - name: Envoy Gateway
       url: https://gateway.envoyproxy.io/
   maintainers:
-    - email: amedeo@linux.com
+    - email: asalvati@redhat.com
       name: Amedeo Salvati
   maturity: alpha
   minKubeVersion: 1.35.0
