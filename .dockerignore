@@ -1,0 +1,5 @@
+# Only these files go into the operator image (see Dockerfile).
+*
+!LICENSE
+!watches.yaml
+!helm-charts/
