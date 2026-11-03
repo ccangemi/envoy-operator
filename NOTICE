@@ -6,7 +6,8 @@ source code.
 
 - Envoy Gateway (https://github.com/envoyproxy/gateway)
   Copyright Envoy Gateway Authors. Licensed under the Apache License 2.0.
-  The directory helm-charts/gateway-helm is the upstream Helm chart, unchanged.
+  The directory helm-charts/envoy-gateway/charts/gateway-helm is the upstream
+  Helm chart, unchanged.
 - Operator SDK helm-operator (https://github.com/operator-framework/operator-sdk)
   Copyright The Operator-SDK Authors. Licensed under the Apache License 2.0.
 

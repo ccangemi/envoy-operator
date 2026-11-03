@@ -1,0 +1,59 @@
+# Values of the operator chart. The operator merges the spec of the
+# EnvoyGateway resource on top of these values.
+#
+# The upstream chart is a subchart, so its values go under "gateway-helm".
+# For example, to run two replicas of the controller:
+#
+#   spec:
+#     gateway-helm:
+#       deployment:
+#         replicas: 2
+#
+# The values below differ from the upstream defaults, so that Envoy Gateway
+# works on OpenShift. templates/validate.yaml refuses the values that would
+# harm the cluster. docs/openshift.md explains each of them.
+gateway-helm:
+  # Never install the Gateway API CRDs and the "safe-upgrades" admission
+  # policy of the upstream chart. The OpenShift Ingress Operator owns the
+  # Gateway API CRDs. The Envoy Gateway CRDs come with the operator bundle.
+  crds:
+    enabled: false
+  # The namespace exists already: it is the namespace of the operator, and the
+  # release goes there.
+  createNamespace: false
+  # The topology injector is a cluster-wide mutating webhook for pods. It adds
+  # zone labels for zone-aware routing. You can turn it on.
+  topologyInjector:
+    enabled: false
+  # The images, pinned by digest. hack/update-upstream.sh writes them, and
+  # config/manifests/related-images.yaml lists the same images. To use a mirror
+  # registry, prefer an ImageDigestMirrorSet; global.imageRegistry also works.
+  global:
+    images:
+      envoyGateway:
+        image: docker.io/envoyproxy/gateway:v1.9.3@sha256:192fc9bdadb6d2462e8cf7bd702ce3dd9648f3310c6038787448a1f509b7cd9f
+      ratelimit:
+        image: docker.io/envoyproxy/ratelimit:5ae0682e@sha256:b95206e32b1a5f824fb06062fbb85bbdfb7f5de54135e92afe8462f22c979681
+  # The restricted-v2 SCC does not allow the fixed user and group ID 65532 of
+  # the upstream chart. Without them (null removes an upstream default),
+  # OpenShift assigns IDs from the namespace range.
+  deployment:
+    envoyGateway:
+      securityContext:
+        runAsUser: null
+        runAsGroup: null
+    pod:
+      securityContext:
+        runAsUser: null
+        runAsGroup: null
+        fsGroup: null
+  certgen:
+    job:
+      pod:
+        securityContext:
+          runAsUser: null
+          runAsGroup: null
+          fsGroup: null
+      securityContext:
+        runAsUser: null
+        runAsGroup: null
