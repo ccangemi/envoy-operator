@@ -1,0 +1,53 @@
+# The data plane settings for the example Gateway: a ClusterIP Service and
+# small resource requests. Expose a Gateway with an OpenShift Route, or change
+# the Service type.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: eg-test-gateway
+  namespace: eg-test
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        type: ClusterIP
+      envoyDeployment:
+        container:
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: eg-test-gateway
+  namespace: eg-test
+spec:
+  gatewayClassName: eg-test
+  infrastructure:
+    parametersRef:
+      group: gateway.envoyproxy.io
+      kind: EnvoyProxy
+      name: eg-test-gateway
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: backend
+  namespace: eg-test
+spec:
+  parentRefs:
+    - name: eg-test-gateway
+  rules:
+    - backendRefs:
+        - name: backend
+          port: 8080

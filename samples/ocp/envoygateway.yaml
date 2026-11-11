@@ -1,0 +1,17 @@
+# An EnvoyGateway for OpenShift in Gateway Namespace Mode: the Envoy proxy of
+# each Gateway runs in the namespace of the Gateway, with a service account
+# that has the name of the Gateway. The end-to-end test uses this resource.
+apiVersion: envoygateway.ccangemi.github.io/v1alpha1
+kind: EnvoyGateway
+metadata:
+  name: envoy-gateway
+  namespace: envoy-gateway-system
+spec:
+  gateway-helm:
+    config:
+      envoyGateway:
+        provider:
+          type: Kubernetes
+          kubernetes:
+            deploy:
+              type: GatewayNamespace

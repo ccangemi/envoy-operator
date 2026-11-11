@@ -25,4 +25,3 @@ resources:
 - envoygateway_admin_role.yaml
 - envoygateway_editor_role.yaml
 - envoygateway_viewer_role.yaml
-

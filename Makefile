@@ -1,231 +1,134 @@
-# VERSION defines the project version for the bundle.
-# Update this value when you upgrade the version of your project.
-# To re-generate a bundle for another specific version without changing the standard setup, you can:
-# - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
-# - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
-VERSION ?= 0.0.1
+# envoy-gateway-operator Makefile. Run `make help` for the list of targets.
 
-# CHANNELS define the bundle channels used in the bundle.
-# Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
-# To re-generate a bundle for other specific channels without changing the standard setup, you can:
-# - use the CHANNELS as arg of the bundle target (e.g make bundle CHANNELS=candidate,fast,stable)
-# - use environment variables to overwrite this value (e.g export CHANNELS="candidate,fast,stable")
-ifneq ($(origin CHANNELS), undefined)
-BUNDLE_CHANNELS := --channels=$(CHANNELS)
-endif
+SHELL := /usr/bin/env bash -o pipefail
+.SHELLFLAGS := -ec
+.DEFAULT_GOAL := help
 
-# DEFAULT_CHANNEL defines the default channel used in the bundle.
-# Add a new line here if you would like to change its default config. (E.g DEFAULT_CHANNEL = "stable")
-# To re-generate a bundle for any other default channel without changing the default setup, you can:
-# - use the DEFAULT_CHANNEL as arg of the bundle target (e.g make bundle DEFAULT_CHANNEL=stable)
-# - use environment variables to overwrite this value (e.g export DEFAULT_CHANNEL="stable")
-ifneq ($(origin DEFAULT_CHANNEL), undefined)
-BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
-endif
-BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
+include versions.env
 
-# IMAGE_TAG_BASE defines the docker.io namespace and part of the image name for remote images.
-# This variable is used to construct full image tags for bundle and catalog images.
-#
-# For example, running 'make bundle-build bundle-push catalog-build catalog-push' will build and push both
-# ccangemi.github.io/envoy-gateway-operator-bundle:$VERSION and ccangemi.github.io/envoy-gateway-operator-catalog:$VERSION.
-IMAGE_TAG_BASE ?= ccangemi.github.io/envoy-gateway-operator
+CONTAINER_TOOL ?= $(shell command -v podman >/dev/null 2>&1 && echo podman || echo docker)
+# Images for local tests only. The release workflow builds and pushes the
+# published operator image; the community catalog pipeline builds the bundle
+# image.
+IMAGE_TAG ?= v$(OPERATOR_VERSION)
+IMG ?= $(OPERATOR_IMAGE_REPOSITORY):$(IMAGE_TAG)
+BUNDLE_IMG ?= $(OPERATOR_IMAGE_REPOSITORY)-bundle:$(IMAGE_TAG)
+CATALOG_IMG ?= $(OPERATOR_IMAGE_REPOSITORY)-catalog:$(IMAGE_TAG)
+PACKAGE := envoy-gateway-operator
 
-# BUNDLE_IMG defines the image:tag used for the bundle.
-# You can use it as an arg. (E.g make bundle-build BUNDLE_IMG=<some-registry>/<project-name-bundle>:<tag>)
-BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
-
-# BUNDLE_GEN_FLAGS are the flags passed to the operator-sdk generate bundle command
-BUNDLE_GEN_FLAGS ?= -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
-
-# USE_IMAGE_DIGESTS defines if images are resolved via tags or digests
-# You can enable this value if you would like to use SHA Based Digests
-# To enable set flag to true
-USE_IMAGE_DIGESTS ?= false
-ifeq ($(USE_IMAGE_DIGESTS), true)
-	BUNDLE_GEN_FLAGS += --use-image-digests
-endif
-
-# Set the Operator SDK version to use. By default, what is installed on the system is used.
-# This is useful for CI or a project to utilize a specific version of the operator-sdk toolkit.
-OPERATOR_SDK_VERSION ?= v1.42.3
-
-# Container tool to use for building and pushing images
-CONTAINER_TOOL ?= docker
-
-# Image URL to use all building/pushing image targets
-IMG ?= controller:latest
-
-.PHONY: all
-all: docker-build
+BIN := $(CURDIR)/bin
+OPERATOR_SDK := $(BIN)/operator-sdk
+KUSTOMIZE := $(BIN)/kustomize
+KUBECTL ?= oc
 
 ##@ General
 
-# The help target prints out all targets with their descriptions organized
-# beneath their categories. The categories are represented by '##@' and the
-# target descriptions by '##'. The awk commands is responsible for reading the
-# entire set of makefiles included in this invocation, looking for lines of the
-# file as xyz: ## something, and then pretty-format the target and help. Then,
-# if there's a line with ##@ something, that gets pretty-printed as a category.
-# More info on the usage of ANSI control characters for terminal formatting:
-# https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_parameters
-# More info on the awk command:
-# http://linuxcommand.org/lc3_adv_awk.php
-
 .PHONY: help
-help: ## Display this help.
-	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+help: ## Show this help.
+	@awk 'BEGIN {FS = ":.*##"; printf "Usage: make <target>\n"} \
+	  /^[a-zA-Z0-9_-]+:.*?##/ { printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2 } \
+	  /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) }' $(MAKEFILE_LIST)
 
-##@ Build
+.PHONY: tools
+tools: ## Install the pinned tools (helm, yq, kustomize, operator-sdk, opm) in bin/.
+	hack/tools.sh
 
-.PHONY: run
-run: helm-operator ## Run against the configured Kubernetes cluster in ~/.kube/config
-	$(HELM_OPERATOR) run
+##@ Upstream
 
-.PHONY: docker-build
-docker-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -t ${IMG} .
+.PHONY: update-upstream
+update-upstream: tools ## Pull the chart and CRDs of versions.env, pin the images, regenerate the RBAC (needs network access).
+	hack/update-upstream.sh
 
-.PHONY: docker-push
-docker-push: ## Push docker image with the manager.
-	$(CONTAINER_TOOL) push ${IMG}
+.PHONY: chart-check
+chart-check: tools ## Check that the chart and the CRDs are the upstream ones, unchanged (needs network access).
+	hack/chart-check.sh
 
-# PLATFORMS defines the target platforms for  the manager image be build to provide support to multiple
-# architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
-# - able to use docker buildx . More info: https://docs.docker.com/build/buildx/
-# - have enable BuildKit, More info: https://docs.docker.com/develop/develop-images/build_enhancements/
-# - be able to push the image for your registry (i.e. if you do not inform a valid value via IMG=<myregistry/image:<tag>> than the export will fail)
-# To properly provided solutions that supports more than one platform you should use this option.
-PLATFORMS ?= linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
-.PHONY: docker-buildx
-docker-buildx: ## Build and push docker image for the manager for cross-platform support
-	- $(CONTAINER_TOOL) buildx create --name project-v3-builder
-	$(CONTAINER_TOOL) buildx use project-v3-builder
-	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile .
-	- $(CONTAINER_TOOL) buildx rm project-v3-builder
+.PHONY: rbac-check
+rbac-check: tools ## Check that config/rbac/role.yaml matches the chart.
+	hack/generate-rbac.sh --check
 
-##@ Deployment
-
-.PHONY: install
-install: kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
-	$(KUSTOMIZE) build config/crd | kubectl apply -f -
-
-.PHONY: uninstall
-uninstall: kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config.
-	$(KUSTOMIZE) build config/crd | kubectl delete -f -
-
-.PHONY: deploy
-deploy: kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	$(KUSTOMIZE) build config/default | kubectl apply -f -
-
-.PHONY: undeploy
-undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
-	$(KUSTOMIZE) build config/default | kubectl delete -f -
-
-OS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
-ARCH := $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
-
-.PHONY: kustomize
-KUSTOMIZE = $(shell pwd)/bin/kustomize
-kustomize: ## Download kustomize locally if necessary.
-ifeq (,$(wildcard $(KUSTOMIZE)))
-ifeq (,$(shell which kustomize 2>/dev/null))
-	@{ \
-	set -e ;\
-	mkdir -p $(dir $(KUSTOMIZE)) ;\
-	curl -sSLo - https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/v5.6.0/kustomize_v5.6.0_$(OS)_$(ARCH).tar.gz | \
-	tar xzf - -C bin/ ;\
-	}
-else
-KUSTOMIZE = $(shell which kustomize)
-endif
-endif
-
-.PHONY: helm-operator
-HELM_OPERATOR = $(shell pwd)/bin/helm-operator
-helm-operator: ## Download helm-operator locally if necessary, preferring the $(pwd)/bin path over global if both exist.
-ifeq (,$(wildcard $(HELM_OPERATOR)))
-ifeq (,$(shell which helm-operator 2>/dev/null))
-	@{ \
-	set -e ;\
-	mkdir -p $(dir $(HELM_OPERATOR)) ;\
-	curl -sSLo $(HELM_OPERATOR) https://github.com/operator-framework/operator-sdk/releases/download/v1.42.3/helm-operator_$(OS)_$(ARCH) ;\
-	chmod +x $(HELM_OPERATOR) ;\
-	}
-else
-HELM_OPERATOR = $(shell which helm-operator)
-endif
-endif
-
-.PHONY: operator-sdk
-OPERATOR_SDK ?= $(LOCALBIN)/operator-sdk
-operator-sdk: ## Download operator-sdk locally if necessary.
-ifeq (,$(wildcard $(OPERATOR_SDK)))
-ifeq (, $(shell which operator-sdk 2>/dev/null))
-	@{ \
-	set -e ;\
-	mkdir -p $(dir $(OPERATOR_SDK)) ;\
-	curl -sSLo $(OPERATOR_SDK) https://github.com/operator-framework/operator-sdk/releases/download/$(OPERATOR_SDK_VERSION)/operator-sdk_$(OS)_$(ARCH) ;\
-	chmod +x $(OPERATOR_SDK) ;\
-	}
-else
-OPERATOR_SDK = $(shell which operator-sdk)
-endif
-endif
-
+##@ Bundle
 
 .PHONY: bundle
-bundle: kustomize operator-sdk ## Generate bundle manifests and metadata, then validate generated files.
-	$(OPERATOR_SDK) generate kustomize manifests -q
-	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
-	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle $(BUNDLE_GEN_FLAGS)
-	$(OPERATOR_SDK) bundle validate ./bundle
+bundle: tools ## Generate bundle/ and bundle.Dockerfile (offline).
+	hack/generate-bundle.sh
+
+.PHONY: bundle-check
+bundle-check: bundle ## Regenerate bundle/ and fail if it differs from the committed files.
+	@if [[ -n "$$(git status --porcelain -- bundle bundle.Dockerfile)" ]]; then \
+	  git status --short -- bundle bundle.Dockerfile; \
+	  echo "ERROR: bundle/ is not up to date. Run 'make bundle' and commit the result."; \
+	  exit 1; \
+	fi
+
+.PHONY: bundle-gate
+bundle-gate: tools ## Run the offline safety checks on bundle/ and on the operator chart.
+	hack/bundle-gate.sh
+
+.PHONY: test-gate
+test-gate: tools ## Test that every bundle-gate check detects a broken bundle or chart.
+	hack/test-bundle-gate.sh
+
+.PHONY: validate
+validate: tools ## Validate bundle/ with operator-sdk (operatorframework and community suites).
+	$(OPERATOR_SDK) bundle validate ./bundle --select-optional suite=operatorframework
+	$(OPERATOR_SDK) bundle validate ./bundle --select-optional name=community \
+	  --optional-values=index-path=bundle.Dockerfile
+
+.PHONY: lint
+lint: ## Run shellcheck, a Python syntax check and yamllint (they must be installed).
+	shellcheck -x hack/*.sh hack/e2e/*.sh
+	python3 -I -m py_compile hack/rbac.py
+	python3 -I hack/rbac.py --self-test
+	yamllint -c .yamllint.yaml .
+
+.PHONY: check
+check: lint rbac-check bundle-check bundle-gate test-gate validate ## Run all offline checks of the CI (chart-check needs network access: run it apart).
+
+##@ Catalog and community
+
+.PHONY: catalog
+catalog: tools ## Generate a test catalog in build/catalog for BUNDLE_IMG.
+	hack/build-catalog.sh build/catalog bundle=$(BUNDLE_IMG)
+
+.PHONY: catalog-image
+catalog-image: catalog ## Build a local test catalog image (CATALOG_IMG).
+	$(CONTAINER_TOOL) build -f catalog.Dockerfile -t $(CATALOG_IMG) .
+
+.PHONY: community
+community: ## Prepare build/community/operators/$(PACKAGE) for the community catalog.
+	hack/community-layout.sh
+
+##@ End-to-end tests (OpenShift)
+
+.PHONY: build-on-cluster
+build-on-cluster: tools ## Build the operator, bundle and catalog images in the cluster (needs KUBECONFIG).
+	hack/e2e/build-on-cluster.sh
+
+.PHONY: e2e-ocp
+e2e-ocp: tools ## Install with OLM and test on OpenShift; set CATALOG_IMAGE for a test catalog (needs KUBECONFIG).
+	hack/e2e/ocp.sh all
+
+.PHONY: e2e-ocp-uninstall
+e2e-ocp-uninstall: tools ## Delete the examples and the resource, and uninstall the operator (needs KUBECONFIG).
+	hack/e2e/ocp.sh uninstall
+
+##@ Development
+
+.PHONY: install-crds
+install-crds: tools ## Apply the CRDs of config/crd to the cluster (needs KUBECONFIG).
+	$(KUSTOMIZE) build config/crd | $(KUBECTL) apply --server-side -f -
+
+.PHONY: run
+run: tools install-crds ## Run the operator on your machine against the cluster, in OPERATOR_NAMESPACE (needs KUBECONFIG).
+	hack/tools.sh helm-operator
+	WATCH_NAMESPACE=$(OPERATOR_NAMESPACE) $(BIN)/helm-operator run --watches-file watches.yaml \
+	  --leader-elect=false --health-probe-bind-address=:8081
+
+.PHONY: docker-build
+docker-build: ## Build the operator image (IMG) for local tests.
+	$(CONTAINER_TOOL) build -t $(IMG) .
 
 .PHONY: bundle-build
-bundle-build: ## Build the bundle image.
+bundle-build: ## Build the bundle image (BUNDLE_IMG) for local tests.
 	$(CONTAINER_TOOL) build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
-
-.PHONY: bundle-push
-bundle-push: ## Push the bundle image.
-	$(MAKE) docker-push IMG=$(BUNDLE_IMG)
-
-.PHONY: opm
-OPM = $(LOCALBIN)/opm
-opm: ## Download opm locally if necessary.
-ifeq (,$(wildcard $(OPM)))
-ifeq (,$(shell which opm 2>/dev/null))
-	@{ \
-	set -e ;\
-	mkdir -p $(dir $(OPM)) ;\
-	curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/v1.55.0/$(OS)-$(ARCH)-opm ;\
-	chmod +x $(OPM) ;\
-	}
-else
-OPM = $(shell which opm)
-endif
-endif
-
-# A comma-separated list of bundle images (e.g. make catalog-build BUNDLE_IMGS=example.com/operator-bundle:v0.1.0,example.com/operator-bundle:v0.2.0).
-# These images MUST exist in a registry and be pull-able.
-BUNDLE_IMGS ?= $(BUNDLE_IMG)
-
-# The image tag given to the resulting catalog image (e.g. make catalog-build CATALOG_IMG=example.com/operator-catalog:v0.2.0).
-CATALOG_IMG ?= $(IMAGE_TAG_BASE)-catalog:v$(VERSION)
-
-# Set CATALOG_BASE_IMG to an existing catalog image tag to add $BUNDLE_IMGS to that image.
-ifneq ($(origin CATALOG_BASE_IMG), undefined)
-FROM_INDEX_OPT := --from-index $(CATALOG_BASE_IMG)
-endif
-
-# Build a catalog image by adding bundle images to an empty catalog using the operator package manager tool, 'opm'.
-# This recipe invokes 'opm' in 'semver' bundle add mode. For more information on add modes, see:
-# https://github.com/operator-framework/community-operators/blob/7f1438c/docs/packaging-operator.md#updating-your-existing-operator
-.PHONY: catalog-build
-catalog-build: opm ## Build a catalog image.
-	$(OPM) index add --container-tool $(CONTAINER_TOOL) --mode semver --tag $(CATALOG_IMG) --bundles $(BUNDLE_IMGS) $(FROM_INDEX_OPT)
-
-# Push the catalog image.
-.PHONY: catalog-push
-catalog-push: ## Push a catalog image.
-	$(MAKE) docker-push IMG=$(CATALOG_IMG)

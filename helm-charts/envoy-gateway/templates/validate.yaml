@@ -1,0 +1,26 @@
+{{- /*
+Renders nothing. It refuses values that would harm an OpenShift cluster or
+that cannot work with the operator. The operator reports the message in the
+status of the EnvoyGateway resource.
+*/ -}}
+{{- $eg := index .Values "gateway-helm" }}
+
+{{- /* The Gateway API CRDs belong to OpenShift. */}}
+{{- if dig "crds" "enabled" false $eg }}
+{{- fail "gateway-helm.crds.enabled must stay false: it installs the Gateway API CRDs, which the OpenShift Ingress Operator owns. The Envoy Gateway CRDs come with the operator." }}
+{{- end }}
+
+{{- /* The release goes in the namespace of the resource, which exists. */}}
+{{- if $eg.createNamespace }}
+{{- fail "gateway-helm.createNamespace must stay false: the namespace of the EnvoyGateway resource already exists." }}
+{{- end }}
+{{- with $eg.namespaceOverride }}
+{{- if ne . $.Release.Namespace }}
+{{- fail (printf "gateway-helm.namespaceOverride is %q: Envoy Gateway must run in the namespace of the EnvoyGateway resource (%s)." . $.Release.Namespace) }}
+{{- end }}
+{{- end }}
+
+{{- /* A watch block breaks the permissions of the controller. */}}
+{{- if dig "config" "envoyGateway" "provider" "kubernetes" "watch" "" $eg }}
+{{- fail "gateway-helm.config.envoyGateway.provider.kubernetes.watch must not be set: it moves the controller permissions into namespaced Roles, and the controller then cannot list resources at the cluster scope." }}
+{{- end }}

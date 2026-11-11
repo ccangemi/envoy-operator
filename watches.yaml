@@ -1,8 +1,13 @@
 # The custom resource that the operator watches, and the chart that it
-# installs for each resource. helm-charts/gateway-helm is the upstream chart,
-# unchanged.
+# installs for each resource. The spec of the resource holds the values of the
+# chart. helm-charts/envoy-gateway sets the values that OpenShift needs and
+# contains the upstream chart, unchanged, in charts/gateway-helm.
 - group: envoygateway.ccangemi.github.io
   version: v1alpha1
   kind: EnvoyGateway
-  chart: helm-charts/gateway-helm
+  chart: helm-charts/envoy-gateway
+  # The operator compares the installed release with a dry run of an upgrade.
+  # In the "server" mode the chart can read the cluster (Helm lookup) during
+  # the dry run, so the comparison sees the same objects as a real upgrade.
+  dryRunOption: server
 # +kubebuilder:scaffold:watch

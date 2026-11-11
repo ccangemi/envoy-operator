@@ -1,0 +1,12 @@
+---
+# Basic catalog template for the community catalog. The release pipeline adds
+# each new bundle (see release-config.yaml in the bundle directory).
+schema: olm.template.basic
+entries:
+  - schema: olm.package
+    name: envoy-gateway-operator
+    defaultChannel: alpha
+  - schema: olm.channel
+    package: envoy-gateway-operator
+    name: alpha
+    entries: []

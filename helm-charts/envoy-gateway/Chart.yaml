@@ -1,0 +1,19 @@
+apiVersion: v2
+name: envoy-gateway
+description: >-
+  The chart of envoy-gateway-operator: the upstream Envoy Gateway chart (charts/gateway-helm, unchanged) with the values for OpenShift.
+type: application
+# The operator version (versions.env). hack/update-upstream.sh keeps it, the
+# appVersion and the dependency version in step with versions.env.
+version: 0.1.0
+appVersion: v1.9.3
+home: https://github.com/ccangemi/envoy-operator
+sources:
+  - https://github.com/ccangemi/envoy-operator
+  - https://github.com/envoyproxy/gateway
+dependencies:
+  # The upstream chart, vendored in charts/ by hack/update-upstream.sh and
+  # never changed by hand (hack/chart-check.sh checks it).
+  - name: gateway-helm
+    version: v1.9.3
+    repository: ""

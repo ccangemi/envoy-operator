@@ -3,6 +3,7 @@
 /build/
 /tmp/
 *.part
+__pycache__/
 *.swp
 *~
 .DS_Store
