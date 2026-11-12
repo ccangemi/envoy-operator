@@ -15,9 +15,9 @@ never installs, changes or removes the Gateway API CRDs.
 
 | Component | Version |
 |---|---|
-| Operator | 0.1.0 (channel `alpha`) |
+| Operator | 0.1.1 (channel `alpha`) |
 | Envoy Gateway | v1.9.3 |
-| OpenShift | 4.22 or later (Gateway API v1.4.1) |
+| OpenShift | 4.22 only (Gateway API v1.4.1) |
 | helm-operator (Operator SDK) | v1.42.3 |
 
 The file [versions.env](versions.env) defines these versions.
@@ -51,7 +51,7 @@ them, for example with a Helm chart that Argo CD syncs.
 
 ## Quick start
 
-1. Make sure that the cluster runs OpenShift 4.22 or later.
+1. Make sure that the cluster runs OpenShift 4.22.
 2. Install the operator. See [docs/install.md](docs/install.md).
 3. Create the `EnvoyGateway` resource. The directory [samples/ocp](samples/ocp)
    has examples, also one for [The Agent Router](https://github.com/theagentrouter/agent-router).

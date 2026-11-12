@@ -5,7 +5,7 @@ description: >-
 type: application
 # The operator version (versions.env). hack/update-upstream.sh keeps it, the
 # appVersion and the dependency version in step with versions.env.
-version: 0.1.0
+version: 0.1.1
 appVersion: v1.9.3
 home: https://github.com/ccangemi/envoy-operator
 sources:

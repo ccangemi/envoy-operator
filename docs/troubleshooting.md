@@ -3,7 +3,7 @@
 ## The operator does not install
 
 **OLM reports `RequirementsNotMet` for native APIs.** The cluster does not
-serve the Gateway API v1 kinds. The operator needs OpenShift 4.22 or later.
+serve the Gateway API v1 kinds. The operator needs OpenShift 4.22.
 
 **The OperatorGroup does not fit.** The operator supports only the
 OwnNamespace install mode. The OperatorGroup must target its own namespace

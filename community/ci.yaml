@@ -4,7 +4,9 @@
 # Check the current format in the operator-pipelines documentation before the
 # first pull request:
 # https://github.com/redhat-openshift-ecosystem/operator-pipelines/tree/main/docs/users
-updateGraph: replaces-mode
+# The operator uses the FBC workflow: catalog-templates/basic.yaml and the
+# release-config.yaml of each bundle define the update graph, so updateGraph
+# (only for operators without FBC) is not set.
 # GitHub user names that can approve changes to this operator.
 reviewers:
   - amedeos

@@ -108,8 +108,8 @@ spec:
 
     ## Before you install
 
-    * OpenShift 4.22 or later. The operator needs Gateway API v1.4
-      (`BackendTLSPolicy` v1), which OpenShift 4.22 provides.
+    * OpenShift 4.22, the only supported version. The operator needs
+      Gateway API v1.4 (`BackendTLSPolicy` v1), which OpenShift 4.22 provides.
     * Create the namespace `envoy-gateway-system`, and install the operator
       there with the "A specific namespace on the cluster" install mode.
 
