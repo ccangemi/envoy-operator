@@ -2,8 +2,9 @@
 
 ## Before you start
 
-* OpenShift 4.22 or later. OLM refuses to install the operator when the cluster
-  does not serve the Gateway API v1 kinds, including `BackendTLSPolicy`.
+* OpenShift 4.22, the only supported version. OLM refuses to install the
+  operator when the cluster does not serve the Gateway API v1 kinds, including
+  `BackendTLSPolicy`.
 * Cluster administrator rights: the operator installs CRDs, cluster roles and
   a controller that watches all namespaces.
 
