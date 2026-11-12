@@ -104,9 +104,20 @@ community catalog.
 
 ## Release
 
-The operator image is published on the GitHub container registry of the
-repository. The community catalog pipeline builds only the bundle image, so
-the operator image must exist before the community pull request.
+The operator image is published on quay.io, in the repository of
+`OPERATOR_IMAGE_REPOSITORY` in [versions.env](../versions.env). The community
+catalog pipeline builds only the bundle image, so the operator image must
+exist before the community pull request.
+
+Before the first release:
+
+* Create the image repository on quay.io and make it public.
+* Create a robot account with write access to it.
+* Add two repository secrets for GitHub Actions: `QUAY_USERNAME` (the robot
+  name, for example `gateway-operators+github_actions`) and `QUAY_PASSWORD`
+  (the robot token).
+
+Then:
 
 1. Merge the version change (see above) into `main`.
 2. Push the tag `v<OPERATOR_VERSION>`, for example `v0.1.0`.
@@ -114,14 +125,12 @@ the operator image must exist before the community pull request.
    * runs all checks, and checks the pinned bundle with a placeholder digest,
      so that a problem stops the release before the image is public;
    * builds the operator image for amd64 and arm64 and pushes it to
-     `ghcr.io/<owner>/envoy-gateway-operator:v<OPERATOR_VERSION>`;
+     `quay.io/<organization>/envoy-gateway-operator:v<OPERATOR_VERSION>`;
    * regenerates the bundle with the image pinned by digest, and runs the
      gate with `REQUIRE_PINNED_OPERATOR_IMAGE=true`. When you run the job
      again, it reuses the image that an earlier run pushed, so the digest of
      a published tag never changes;
    * creates a GitHub release with the directory for the community catalog.
-4. Make the image package public in the GitHub settings (only the first
-   time).
 
 ## Community catalog
 

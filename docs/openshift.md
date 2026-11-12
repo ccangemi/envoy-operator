@@ -121,7 +121,7 @@ not with the operator.
 
 | Name in `relatedImages` | Image |
 |---|---|
-| `operator` | `ghcr.io/ccangemi/envoy-gateway-operator` |
+| `operator` | `quay.io/gateway-operators/envoy-gateway-operator` |
 | `envoy-gateway` | `docker.io/envoyproxy/gateway` (controller, certgen) |
 | `envoy-ratelimit` | `docker.io/envoyproxy/ratelimit` |
 | `envoy-proxy` | `docker.io/envoyproxy/envoy`, the default proxy image compiled into Envoy Gateway |
