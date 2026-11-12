@@ -17,8 +17,8 @@ release.
 1. Check the GitHub user names of the maintainers in `reviewers` in
    `ci.yaml`.
 2. Make sure that the operator image of the version exists and is public
-   (the release workflow pushes it to the GitHub container registry). The
-   community pipeline builds only the bundle image.
+   (the release workflow pushes it to quay.io). The community pipeline
+   builds only the bundle image.
 3. Run `make community` (or download the archive from the GitHub release).
    It writes `build/community/operators/envoy-gateway-operator/`.
 4. Copy the directory into a fork of the community repository.

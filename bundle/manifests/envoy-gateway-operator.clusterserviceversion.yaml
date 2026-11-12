@@ -34,7 +34,7 @@ metadata:
     operators.operatorframework.io/project_layout: helm.sdk.operatorframework.io/v1
     repository: https://github.com/ccangemi/envoy-operator
     support: Community
-    containerImage: ghcr.io/ccangemi/envoy-gateway-operator:v0.1.0
+    containerImage: quay.io/gateway-operators/envoy-gateway-operator:v0.1.0
   labels:
     operatorframework.io/arch.amd64: supported
     operatorframework.io/arch.arm64: supported
@@ -509,7 +509,7 @@ spec:
                         valueFrom:
                           fieldRef:
                             fieldPath: metadata.annotations['olm.targetNamespaces']
-                    image: ghcr.io/ccangemi/envoy-gateway-operator:v0.1.0
+                    image: quay.io/gateway-operators/envoy-gateway-operator:v0.1.0
                     livenessProbe:
                       httpGet:
                         path: /healthz
@@ -623,7 +623,7 @@ spec:
       mediatype: image/svg+xml
   relatedImages:
     - name: operator
-      image: ghcr.io/ccangemi/envoy-gateway-operator:v0.1.0
+      image: quay.io/gateway-operators/envoy-gateway-operator:v0.1.0
     - name: envoy-gateway
       image: docker.io/envoyproxy/gateway:v1.9.3@sha256:192fc9bdadb6d2462e8cf7bd702ce3dd9648f3310c6038787448a1f509b7cd9f
     - name: envoy-ratelimit

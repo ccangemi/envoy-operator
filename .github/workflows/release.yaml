@@ -1,10 +1,14 @@
 # Release: runs when you push a tag v<OPERATOR_VERSION>, for example v0.1.0.
 # It runs all checks again, checks the pinned bundle with a placeholder digest,
-# builds and pushes the operator image to the GitHub container registry (or
-# reuses it when an earlier run pushed it), pins its digest in the bundle, and
+# builds and pushes the operator image to quay.io (or reuses it when an
+# earlier run pushed it), pins its digest in the bundle, and
 # creates a GitHub release with an archive of operators/envoy-gateway-operator/<version>/
 # for the community catalog pull request. The community catalog pipeline builds
 # the bundle image.
+#
+# It needs two repository secrets with a quay.io robot account that can write
+# to the image repository: QUAY_USERNAME (for example
+# gateway-operators+github_actions) and QUAY_PASSWORD (the robot token).
 name: Release
 
 on:
@@ -13,7 +17,6 @@ on:
 
 permissions:
   contents: write
-  packages: write
 
 jobs:
   release:
@@ -30,18 +33,23 @@ jobs:
             echo "ERROR: the tag ${GITHUB_REF_NAME} is not on main. Release only from main." >&2
             exit 1
           fi
-      - name: Check the tag and the image repository in versions.env
+      - name: Check the tag, the image repository and the registry secrets
         env:
-          OWNER: ${{ github.repository_owner }}
+          QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+          QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
         run: |
           source versions.env
           if [[ "${GITHUB_REF_NAME}" != "v${OPERATOR_VERSION}" ]]; then
             echo "ERROR: tag ${GITHUB_REF_NAME} does not match OPERATOR_VERSION=${OPERATOR_VERSION} in versions.env" >&2
             exit 1
           fi
-          expected="ghcr.io/${OWNER,,}/envoy-gateway-operator"
-          if [[ "${OPERATOR_IMAGE_REPOSITORY}" != "${expected}" ]]; then
-            echo "ERROR: OPERATOR_IMAGE_REPOSITORY=${OPERATOR_IMAGE_REPOSITORY} in versions.env, expected ${expected}" >&2
+          if [[ ! "${OPERATOR_IMAGE_REPOSITORY}" =~ ^quay\.io/[a-z0-9_.-]+/envoy-gateway-operator$ ]]; then
+            echo "ERROR: OPERATOR_IMAGE_REPOSITORY=${OPERATOR_IMAGE_REPOSITORY} in versions.env," \
+              "expected quay.io/<organization>/envoy-gateway-operator" >&2
+            exit 1
+          fi
+          if [[ -z "${QUAY_USERNAME}" || -z "${QUAY_PASSWORD}" ]]; then
+            echo "ERROR: the repository secrets QUAY_USERNAME and QUAY_PASSWORD must be set (quay.io robot account with write access)" >&2
             exit 1
           fi
       - name: Install the pinned tools
@@ -63,11 +71,12 @@ jobs:
           hack/community-layout.sh build/community-check
       - name: Build and push the operator image
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+          QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
         run: |
           source versions.env
           image="${OPERATOR_IMAGE_REPOSITORY}:v${OPERATOR_VERSION}"
-          echo "${GH_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+          echo "${QUAY_PASSWORD}" | docker login quay.io -u "${QUAY_USERNAME}" --password-stdin
           docker buildx create --name multiarch --driver docker-container --use
           if docker buildx imagetools inspect "${image}" >/dev/null 2>&1; then
             # An earlier run of this release pushed it: reuse it, so that the
