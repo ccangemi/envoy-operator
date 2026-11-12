@@ -15,7 +15,7 @@ never installs, changes or removes the Gateway API CRDs.
 
 | Component | Version |
 |---|---|
-| Operator | 0.1.0 (channel `alpha`) |
+| Operator | 0.1.1 (channel `alpha`) |
 | Envoy Gateway | v1.9.3 |
 | OpenShift | 4.22 only (Gateway API v1.4.1) |
 | helm-operator (Operator SDK) | v1.42.3 |

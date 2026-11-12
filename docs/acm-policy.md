@@ -64,7 +64,7 @@ spec:
           # Approve only the versions that you have tested.
           upgradeApproval: Automatic
           versions:
-            - envoy-gateway-operator.v0.1.0
+            - envoy-gateway-operator.v0.1.1
     - extraDependencies:
         - apiVersion: policy.open-cluster-management.io/v1beta1
           kind: OperatorPolicy
